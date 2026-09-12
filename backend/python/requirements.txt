@@ -1,0 +1,5 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+motor==3.6.0
+pysnmp==7.1.21
+pyasn1==0.6.4

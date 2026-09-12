@@ -1,0 +1,18 @@
+# Build context is the repository root, so this file governs every image.
+.git
+.gitignore
+**/node_modules
+**/venv
+**/__pycache__
+**/.angular
+**/*.pem
+**/.env
+**/.env.*
+!**/.env.example
+
+# The frontend bundle is produced inside the image by the build stage; never
+# copy a locally-built one in, or the image silently ships a stale UI.
+backend/public
+
+front-end/dist
+README.md

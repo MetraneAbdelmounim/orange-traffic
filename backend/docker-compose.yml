@@ -1,0 +1,72 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: orange-traffic-mongo
+    restart: always
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    container_name: orange-traffic-app
+    restart: always
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      MONGO_URL: mongodb://mongo:27017/orangetraffic
+      TZ: America/Toronto
+      HOST_PY: poller
+      PORT_PY: 8000
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  poller:
+    container_name: orange-traffic-poller
+    restart: always
+    build:
+      context: ..
+      dockerfile: backend/python/Dockerfile
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      MONGO_URL: mongodb://mongo:27017/orangetraffic
+      TZ: America/Toronto
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  proxy:
+    restart: always
+    build:
+      context: ..
+      dockerfile: backend/nginx/Dockerfile
+    # 80/443 are already taken on this host by another app (project-youness) —
+    # this stack is reachable on 8080/8443 instead. The container's own nginx
+    # config still listens on 80/443 internally; only the host-side mapping
+    # differs, so backend/nginx/default.conf needs no change.
+    ports:
+      - "8080:80"
+      - "8443:443"
+    depends_on:
+      - app
+
+volumes:
+  mongo-data:
