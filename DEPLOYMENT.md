@@ -8,11 +8,19 @@ les ports **publiés sur l'hôte** peuvent entrer en conflit.
 ## Pourquoi des ports différents
 
 project-youness publie déjà `80` et `443` (son service `proxy`). Orange
-Traffic utilise donc **`8080`/`8443`** à la place — voir
+Traffic utilise donc **`18080`/`18443`** à la place — voir
 `backend/docker-compose.yml`. Rien d'autre ne se recoupe : Mongo, l'API Node
 et le poller Python de chaque app restent internes à leur propre réseau
 Docker (jamais publiés sur l'hôte), donc réutiliser les mêmes ports internes
 (5000, 8000, 27017) d'une app à l'autre est sans risque.
+
+> **Vécu au premier essai** : `8080` semblait libre mais a échoué au
+> démarrage avec `port is already allocated` — un troisième service tournait
+> déjà dessus sur ce VPS (ni project-youness, ni détecté par
+> `Get-NetTCPConnection` au moment du test). D'où `18080`/`18443` : des ports
+> assez inhabituels pour qu'une collision soit très improbable, et l'étape 1
+> ci-dessous vérifie maintenant **aussi les ports publiés par Docker
+> lui-même**, pas seulement ceux vus par Windows.
 
 Toutes les commandes ci-dessous sont **PowerShell**, à lancer en **élevé**
 directement sur le VPS.
@@ -22,15 +30,20 @@ directement sur le VPS.
 ## 1. Vérifier que les ports sont bien libres
 
 ```powershell
-# 80/443 doivent appartenir à project-youness (normal, ne pas y toucher) :
-Get-NetTCPConnection -LocalPort 80,443 -State Listen -ErrorAction SilentlyContinue
+# Vue Windows — 80/443 doivent appartenir à project-youness (normal) :
+Get-NetTCPConnection -LocalPort 80,443,18080,18443 -State Listen -ErrorAction SilentlyContinue
 
-# 8080/8443 doivent être libres avant de démarrer Orange Traffic :
-Get-NetTCPConnection -LocalPort 8080,8443 -State Listen -ErrorAction SilentlyContinue
+# Vue Docker — plus fiable pour repérer un port déjà publié par un AUTRE
+# conteneur (c'est ce qui a été manqué la première fois) :
+docker ps --format "table {{.Names}}\t{{.Ports}}"
+netstat -ano | findstr "18080 18443"
 ```
 
-Si `8080`/`8443` affichent déjà un résultat, changez les deux valeurs dans
-`backend\docker-compose.yml` (section `proxy: ports:`) avant de continuer.
+`18080`/`18443` doivent n'apparaître **nulle part** dans ces trois sorties.
+Si l'un des deux est quand même pris, changez les deux valeurs dans
+`backend\docker-compose.yml` (section `proxy: ports:`) **et** le port codé en
+dur dans `backend\nginx\default.conf` (`return 301 https://$host:18443...`)
+avant de continuer — les deux fichiers doivent toujours s'accorder.
 
 ```powershell
 docker version --format '{{.Server.Os}}'   # doit afficher : linux

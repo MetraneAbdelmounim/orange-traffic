@@ -58,13 +58,17 @@ services:
     build:
       context: ..
       dockerfile: backend/nginx/Dockerfile
-    # 80/443 are already taken on this host by another app (project-youness) —
-    # this stack is reachable on 8080/8443 instead. The container's own nginx
-    # config still listens on 80/443 internally; only the host-side mapping
-    # differs, so backend/nginx/default.conf needs no change.
+    # 80/443 are already taken on this host by another app (project-youness),
+    # and 8080 turned out to already be in use by something else again on the
+    # target VPS — 18080/18443 is an uncommon enough pair to avoid a third
+    # collision. The container's own nginx config still listens on 80/443
+    # internally; only the host-side mapping differs. If either of these is
+    # ALSO taken, check what's actually free first (see DEPLOYMENT.md §1)
+    # rather than guessing a fourth pair — and update
+    # backend/nginx/default.conf's hardcoded redirect port to match.
     ports:
-      - "8080:80"
-      - "8443:443"
+      - "18080:80"
+      - "18443:443"
     depends_on:
       - app
 
