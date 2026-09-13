@@ -7,8 +7,16 @@ const BCRYPT_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 8;
 
 /** Fields a client is allowed to set. Everything else in the body is ignored. */
-const CREATABLE = ['username', 'isAdmin', 'projects'];
-const UPDATABLE = ['isAdmin', 'projects'];
+const CREATABLE = ['username', 'isAdmin', 'projects', 'email', 'notifyOnCritical'];
+const UPDATABLE = ['isAdmin', 'projects', 'email', 'notifyOnCritical'];
+
+/** notifyOnCritical requires an email to actually be reachable at. */
+function validateNotificationPrefs(data) {
+  if (data.notifyOnCritical && !data.email) {
+    return 'Une adresse e-mail est requise pour activer les notifications';
+  }
+  return null;
+}
 
 function pick(body, allowed) {
   return Object.fromEntries(
@@ -26,6 +34,8 @@ module.exports = {
     if (!data.username) {
       return res.status(400).json({ error: "Le nom d'utilisateur est requis" });
     }
+    const prefsError = validateNotificationPrefs(data);
+    if (prefsError) return res.status(400).json({ error: prefsError });
 
     const existing = await Member.findOne({ username: data.username });
     if (existing) {
@@ -63,9 +73,17 @@ module.exports = {
   }),
 
   updateMember: asyncHandler(async (req, res) => {
+    const data = pick(req.body, UPDATABLE);
+
+    const current = await Member.findById(req.params.idMember).lean();
+    if (!current) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+    const prefsError = validateNotificationPrefs({ email: current.email, notifyOnCritical: current.notifyOnCritical, ...data });
+    if (prefsError) return res.status(400).json({ error: prefsError });
+
     const member = await Member.findByIdAndUpdate(
       req.params.idMember,
-      { $set: pick(req.body, UPDATABLE) },
+      { $set: data },
       { new: true, runValidators: true }
     );
     if (!member) return res.status(404).json({ error: 'Utilisateur introuvable' });

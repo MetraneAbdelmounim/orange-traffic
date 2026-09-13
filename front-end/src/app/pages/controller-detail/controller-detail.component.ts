@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
 import { AlarmEventService } from '../../core/services/alarm-event.service';
@@ -85,12 +85,15 @@ function formatUptime(ticks: number | null): string {
             <span class="icon-badge tone-crit" [innerHTML]="icon.bell | safeHtml"></span>
             <h2 class="font-semibold text-ink">Alarmes NTCIP 1202</h2>
           </div>
-          @if (c.lastSnapshot.activeFlags.length === 0) {
+          @if (!c.lastSnapshot.alarms.length) {
             <p class="chip chip-good"><span class="chip-dot"></span>Aucune alarme active</p>
           } @else {
             <ul class="flex flex-col gap-2">
-              @for (flag of c.lastSnapshot.activeFlags; track flag) {
-                <li class="chip chip-crit"><span class="chip-dot"></span>{{ flag }}</li>
+              @for (alarm of c.lastSnapshot.alarms; track alarm.label) {
+                <li class="chip" [class.chip-crit]="alarm.criticality === 'critical'" [class.chip-warn]="alarm.criticality === 'warning'">
+                  <span class="chip-dot"></span>{{ alarm.label }}
+                  <span class="opacity-70 font-mono text-[0.65rem]">{{ alarm.sourceObject }}</span>
+                </li>
               }
             </ul>
           }
@@ -146,7 +149,7 @@ function formatUptime(ticks: number | null): string {
             <p class="text-sm text-ink-muted">Aucune transition d'alarme enregistrée.</p>
           } @else {
             <ul class="flex flex-col">
-              @for (event of events(); track event._id) {
+              @for (event of pagedEvents(); track event._id) {
                 <li class="table-row py-2 flex items-center justify-between gap-3 text-sm">
                   <span class="flex items-center gap-2">
                     <span class="chip" [class.chip-crit]="event.state === 'active'" [class.chip-good]="event.state === 'cleared'">
@@ -158,6 +161,17 @@ function formatUptime(ticks: number | null): string {
                 </li>
               }
             </ul>
+            @if (totalPages() > 1) {
+              <div class="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-line">
+                <button type="button" class="btn btn-ghost" [disabled]="page() === 1" (click)="page.set(page() - 1)">
+                  ← Précédent
+                </button>
+                <span class="text-xs text-ink-muted">Page {{ page() }} / {{ totalPages() }}</span>
+                <button type="button" class="btn btn-ghost" [disabled]="page() === totalPages()" (click)="page.set(page() + 1)">
+                  Suivant →
+                </button>
+              </div>
+            }
           }
         </div>
       </div>
@@ -174,9 +188,17 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
   @ViewChild('historyCanvas') historyCanvas?: ElementRef<HTMLCanvasElement>;
   private chart?: Chart;
 
+  private readonly PAGE_SIZE = 10;
+
   controller = signal<Controller | null>(null);
   events = signal<AlarmEvent[]>([]);
   polling = signal(false);
+  page = signal(1);
+  pagedEvents = computed(() => {
+    const start = (this.page() - 1) * this.PAGE_SIZE;
+    return this.events().slice(start, start + this.PAGE_SIZE);
+  });
+  totalPages = computed(() => Math.max(1, Math.ceil(this.events().length / this.PAGE_SIZE)));
 
   private controllerId!: string;
   private history?: ControllerHistory;
@@ -192,7 +214,10 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
 
   load(): void {
     this.controllerService.getById(this.controllerId).subscribe((c) => this.controller.set(c));
-    this.alarmEventService.getByController(this.controllerId).subscribe((events) => this.events.set(events));
+    this.alarmEventService.getByController(this.controllerId).subscribe((events) => {
+      this.events.set(events);
+      this.page.set(1);
+    });
     this.controllerService.getHistory(this.controllerId).subscribe((history) => {
       this.history = history;
       this.renderChart(history);

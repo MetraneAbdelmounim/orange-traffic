@@ -1,10 +1,11 @@
 const express = require('express');
 const memberController = require('./memberController');
 const { authenticate, requireAdmin, requireSelfOrAdmin } = require('../middlewares/auth');
+const licenceGuard = require('../middlewares/licenceGuard');
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(licenceGuard, authenticate);
 
 router.post('', requireAdmin, memberController.addMember);
 router.get('', requireAdmin, memberController.getAllMembers);

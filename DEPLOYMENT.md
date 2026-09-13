@@ -114,9 +114,20 @@ fonctionnement que project-youness sur ce VPS.
 
 ## 5. Créer le compte admin
 
+Plus besoin de commande manuelle : la première visite du site sur une base
+vide affiche automatiquement l'assistant de premier démarrage
+(`/setup`), qui crée le compte administrateur, active une licence d'essai
+de 10 jours, et propose la configuration SMTP/notifications. `tools/seed-admin.js`
+reste disponible en secours (accès console uniquement, par ex. pour un script
+de provisioning automatisé), mais n'est plus la voie normale :
+
 ```powershell
 docker compose exec app node tools/seed-admin.js admin "un-mot-de-passe-solide"
 ```
+
+Une fois un premier admin créé (par l'assistant ou ce script), `/setup`
+redirige automatiquement vers `/login` pour tout le monde — il ne peut plus
+être réutilisé pour recréer un compte administrateur.
 
 ---
 
@@ -140,9 +151,14 @@ docker exec orange-traffic-poller ping -c 2 10.8.3.20   # le poller doit joindre
 Dans le navigateur, `https://VPS_IP:18443/` (accepter l'avertissement de
 certificat) :
 
+- [ ] première visite → assistant `/setup` affiché (base vide) ; création du
+      compte admin puis licence démo activée automatiquement (10 jours)
 - [ ] connexion avec le compte admin créé à l'étape 5
+- [ ] `/setup` redirige vers `/login` une fois configuré (plus jamais réaffiché)
 - [ ] création d'un projet + d'un contrôleur
 - [ ] le badge feu tricolore affiche le bon statut après un sweep
+- [ ] page Réglages accessible (admin), SMTP configurable, "Tester SMTP" répond
+- [ ] page Licence : statut démo visible, upload d'un `.otlic` fonctionnel
 - [ ] `project-youness` (sur `https://VPS_IP/`) répond toujours normalement
 
 Confirmez que `project-youness` n'a subi aucune interruption — ses

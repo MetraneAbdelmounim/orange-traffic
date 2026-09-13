@@ -10,6 +10,8 @@ const config = require('./config/config');
 const errorHandler = require('./middlewares/errorHandler');
 
 const authRoute = require('./auth/authRoute');
+const setupRoute = require('./setup/setupRoute');
+const licenceRoute = require('./licence/licenceRoute');
 const projectRoute = require('./project/projectRoute');
 const controllerRoute = require('./controller/controllerRoute');
 const memberRoute = require('./member/memberRoute');
@@ -26,8 +28,18 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'"],
+        // blob: is required by MapLibre, which decodes vector tiles into
+        // images and spawns its workers from generated blobs.
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        workerSrc: ["'self'", 'blob:'],
+        childSrc: ["'self'", 'blob:'],
+        connectSrc: [
+          "'self'",
+          // Map style and vector tiles for the project map. Keyless and
+          // rate-limit-free; swap the host here (and in project-map.component.ts)
+          // if this ever moves to another tile provider.
+          'https://tiles.openfreemap.org',
+        ],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
       },
@@ -72,6 +84,8 @@ app.get('/api/health', (req, res) =>
 );
 
 app.use('/api/auth', authRoute);
+app.use('/api/setup', setupRoute);
+app.use('/api/licence', licenceRoute);
 app.use('/api/projects', projectRoute);
 app.use('/api/controllers', controllerRoute);
 app.use('/api/members', memberRoute);
@@ -98,6 +112,7 @@ if (require.main === module) {
     .connect(config.bdUrl)
     .then(async () => {
       console.log('Connected to the database');
+      require('./notifications/scheduler').start();
       app.listen(config.PORT, () => {
         console.log(`Server running at http://${config.HOST}:${config.PORT}`);
       });

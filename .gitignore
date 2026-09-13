@@ -9,3 +9,5 @@ front-end/dist/
 .env.*
 !.env.example
 *.log
+backend/config/licence-private-key.pem
+*.otlic

@@ -11,7 +11,7 @@ import { SafeHtmlPipe } from '../../ui/safe-html.pipe';
 
 const MEMBERS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>`;
 
-type FormState = { username: string; isAdmin: boolean; projects: string[] };
+type FormState = { username: string; isAdmin: boolean; projects: string[]; email: string; notifyOnCritical: boolean };
 
 @Component({
   selector: 'app-members',
@@ -39,6 +39,7 @@ type FormState = { username: string; isAdmin: boolean; projects: string[] };
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Utilisateur</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Rôle</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Projets</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Alertes</th>
                 <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink-muted">Actions</th>
               </tr>
             </thead>
@@ -58,6 +59,13 @@ type FormState = { username: string; isAdmin: boolean; projects: string[] };
                   </td>
                   <td class="px-5 py-3.5 text-sm text-ink-secondary">
                     {{ member.isAdmin ? 'Tous les projets' : projectNames(member) }}
+                  </td>
+                  <td class="px-5 py-3.5">
+                    @if (member.notifyOnCritical) {
+                      <span class="chip chip-good"><span class="chip-dot"></span>Activées</span>
+                    } @else {
+                      <span class="chip chip-neutral"><span class="chip-dot"></span>Désactivées</span>
+                    }
                   </td>
                   <td class="px-5 py-3.5">
                     <div class="flex justify-end gap-1.5">
@@ -85,6 +93,11 @@ type FormState = { username: string; isAdmin: boolean; projects: string[] };
           <input id="username" name="username" class="field" [(ngModel)]="form.username" [readonly]="!!editing()" required />
         </div>
 
+        <div>
+          <label class="label" for="email">E-mail</label>
+          <input id="email" name="email" type="email" class="field" [(ngModel)]="form.email" placeholder="prenom.nom@exemple.com" />
+        </div>
+
         @if (formError()) {
           <p class="chip chip-crit self-start"><span class="chip-dot"></span>{{ formError() }}</p>
         }
@@ -93,6 +106,14 @@ type FormState = { username: string; isAdmin: boolean; projects: string[] };
           <input type="checkbox" name="isAdmin" class="h-4 w-4 rounded border-line" [(ngModel)]="form.isAdmin" />
           <span class="text-sm text-ink">Administrateur (accès à tous les projets)</span>
         </label>
+
+        <label class="flex items-center gap-3">
+          <input type="checkbox" name="notifyOnCritical" class="h-4 w-4 rounded border-line" [(ngModel)]="form.notifyOnCritical" [disabled]="!form.email.trim()" />
+          <span class="text-sm text-ink">Recevoir les alertes critiques par e-mail</span>
+        </label>
+        @if (!form.email.trim() && form.notifyOnCritical) {
+          <p class="text-xs text-ink-muted -mt-2">Une adresse e-mail est requise pour activer les alertes.</p>
+        }
 
         @if (!form.isAdmin) {
           <div>
@@ -196,7 +217,7 @@ export class MembersComponent implements OnInit {
   createdUsername = signal('');
   formError = signal<string | null>(null);
 
-  form: FormState = { username: '', isAdmin: false, projects: [] };
+  form: FormState = { username: '', isAdmin: false, projects: [], email: '', notifyOnCritical: false };
 
   ngOnInit(): void {
     this.load();
@@ -221,7 +242,7 @@ export class MembersComponent implements OnInit {
 
   openCreate(): void {
     this.editing.set(null);
-    this.form = { username: '', isAdmin: false, projects: [] };
+    this.form = { username: '', isAdmin: false, projects: [], email: '', notifyOnCritical: false };
     this.formError.set(null);
     this.crudOpen.set(true);
   }
@@ -232,6 +253,8 @@ export class MembersComponent implements OnInit {
       username: member.username,
       isAdmin: member.isAdmin,
       projects: member.projects.map((p) => p._id),
+      email: member.email || '',
+      notifyOnCritical: member.notifyOnCritical || false,
     };
     this.formError.set(null);
     this.crudOpen.set(true);
@@ -245,12 +268,21 @@ export class MembersComponent implements OnInit {
 
   submit(): void {
     if (!this.form.username.trim()) return;
+    if (this.form.notifyOnCritical && !this.form.email.trim()) {
+      this.formError.set('Une adresse e-mail est requise pour activer les alertes');
+      return;
+    }
     this.formError.set(null);
 
     const editing = this.editing();
     if (editing) {
       this.memberService
-        .update(editing._id, { isAdmin: this.form.isAdmin, projects: this.form.projects })
+        .update(editing._id, {
+          isAdmin: this.form.isAdmin,
+          projects: this.form.projects,
+          email: this.form.email.trim(),
+          notifyOnCritical: this.form.notifyOnCritical,
+        })
         .subscribe({
           next: () => {
             this.crudOpen.set(false);

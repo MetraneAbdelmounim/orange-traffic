@@ -41,7 +41,13 @@ const FOLDER_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" stro
       } @else {
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           @for (project of projects(); track project._id) {
-            <a [routerLink]="['/projects', project._id]" class="card card-interactive card-accent is-neutral p-5 flex flex-col gap-3">
+            <a
+              [routerLink]="['/projects', project._id]"
+              class="card card-interactive card-accent p-5 flex flex-col gap-3"
+              [class.is-crit]="(project.alarmCount ?? 0) > 0"
+              [class.is-good]="(project.alarmCount ?? 0) === 0 && (project.controllerCount ?? 0) > 0"
+              [class.is-neutral]="!project.controllerCount"
+            >
               <div class="flex items-start justify-between">
                 <span class="icon-badge" [innerHTML]="folderIcon | safeHtml"></span>
                 <svg class="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
@@ -52,6 +58,19 @@ const FOLDER_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" stro
                   <p class="text-sm text-ink-muted mt-1">{{ project.description }}</p>
                 }
               </div>
+              @if (project.controllerCount !== undefined) {
+                <div class="flex flex-wrap gap-1.5 mt-auto pt-1">
+                  <span class="chip chip-neutral">
+                    <span class="chip-dot"></span>{{ project.controllerCount }} contrôleur{{ project.controllerCount === 1 ? '' : 's' }}
+                  </span>
+                  @if (project.alarmCount) {
+                    <span class="chip chip-crit"><span class="chip-dot"></span>{{ project.alarmCount }} en alarme</span>
+                  }
+                  @if (project.offlineCount) {
+                    <span class="chip chip-warn"><span class="chip-dot"></span>{{ project.offlineCount }} injoignable{{ project.offlineCount === 1 ? '' : 's' }}</span>
+                  }
+                </div>
+              }
             </a>
           }
         </div>

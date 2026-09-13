@@ -39,10 +39,20 @@ export class AuthService {
     const res = await firstValueFrom(
       this.http.post<LoginResponse>('/api/auth/signin', { username, password })
     );
-    localStorage.setItem(TOKEN_KEY, res.token);
-    localStorage.setItem(ADMIN_KEY, String(res.isAdmin));
-    this.tokenSignal.set(res.token);
-    this.isAdminSignal.set(res.isAdmin);
+    this.setSession(res.token, res.isAdmin);
+  }
+
+  /**
+   * Persists a session from a token already obtained elsewhere — used by the
+   * first-run setup wizard, whose admin-creation endpoint returns the same
+   * `{token, isAdmin, ...}` shape as `/api/auth/signin` so the new admin
+   * lands signed in without a second manual login.
+   */
+  setSession(token: string, isAdmin: boolean): void {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(ADMIN_KEY, String(isAdmin));
+    this.tokenSignal.set(token);
+    this.isAdminSignal.set(isAdmin);
   }
 
   async logout(): Promise<void> {

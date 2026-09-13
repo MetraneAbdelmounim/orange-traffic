@@ -6,6 +6,10 @@
 **/__pycache__
 **/.angular
 **/*.pem
+# The public key is not a secret — the server needs it at runtime to verify
+# uploaded licenses. Only the matching private key (never committed, never
+# meant to be deployed) stays excluded by the blanket rule above.
+!backend/config/licence-public-key.pem
 **/.env
 **/.env.*
 !**/.env.example

@@ -8,7 +8,7 @@ from typing import Optional
 import config
 import ntcip
 import store
-from decode import decode_snapshot
+from decode import decode_snapshot, decode_snapshot_alarms
 from snmp_client import get_group
 
 log = logging.getLogger(__name__)
@@ -107,6 +107,9 @@ class Poller:
             "shortAlarmStatus": alarm_values.get("shortAlarmStatus"),
         }
         snapshot["activeFlags"] = decode_snapshot(
+            snapshot["unitAlarmStatus1"], snapshot["unitAlarmStatus2"], snapshot["shortAlarmStatus"]
+        )
+        snapshot["alarms"] = decode_snapshot_alarms(
             snapshot["unitAlarmStatus1"], snapshot["unitAlarmStatus2"], snapshot["shortAlarmStatus"]
         )
 

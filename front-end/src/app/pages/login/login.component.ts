@@ -24,7 +24,7 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
         <div class="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60"></div>
 
         <div class="absolute inset-0 flex flex-col justify-between p-12 text-white">
-          <app-brand-logo size="lg" />
+          <app-brand-logo size="lg" variant="partnership" />
 
           <div class="max-w-lg">
             <span class="chip chip-good mb-6">
@@ -52,7 +52,7 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
       <div class="flex w-full items-center justify-center p-6 sm:p-10 lg:w-[28rem] lg:flex-none">
         <div class="w-full max-w-sm">
           <div class="mb-10 flex justify-center lg:hidden">
-            <app-brand-logo size="lg" />
+            <app-brand-logo size="lg" variant="partnership" />
           </div>
 
           <h2 class="text-2xl font-bold tracking-tight text-ink">Supervision ATC-1500</h2>

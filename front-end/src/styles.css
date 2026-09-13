@@ -308,6 +308,23 @@ button {
   .chip-neutral { background-color: var(--neutral-soft); color: var(--neutral); }
   .chip-brand { background-color: var(--brand-soft); color: var(--brand-ink); }
 
+  /* Icon + label pill for an external quick-access link (device UI, modem, Street View). */
+  .link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background-color: var(--brand-soft);
+    color: var(--brand-ink);
+    text-decoration: none;
+    transition: opacity 140ms ease;
+  }
+  .link-chip:hover { opacity: 0.8; }
+  .link-chip svg { flex: none; }
+
   .table-row {
     border-bottom: 1px solid var(--line);
     transition: background-color 120ms ease;
@@ -362,6 +379,122 @@ button {
   .signal-label.is-warn { color: var(--warn); }
   .signal-label.is-good { color: var(--good); }
   .signal-label.is-neutral { color: var(--ink-muted); }
+
+  /* --- Project map (MapLibre) ---------------------------------------------
+     Pins and popups are created imperatively by MapLibre, outside Angular's
+     view encapsulation, so they are styled globally from the same tokens as
+     the rest of the UI rather than with inline colours. */
+  .map-pin {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    border: 2px solid var(--surface);
+    background-color: var(--good);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+    cursor: pointer;
+    transition: transform 140ms ease;
+  }
+  .map-pin:hover {
+    transform: scale(1.25);
+  }
+  .map-pin.is-crit { background-color: var(--crit); }
+  .map-pin.is-down { background-color: var(--neutral); }
+  .map-pin.is-group {
+    width: 1.85rem;
+    height: 1.85rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--surface);
+  }
+  .map-pin.is-selected {
+    transform: scale(1.35);
+    box-shadow: 0 0 0 3px var(--brand), 0 2px 6px rgb(0 0 0 / 0.35);
+    z-index: 1;
+  }
+  .map-pin.is-selected:hover {
+    transform: scale(1.35);
+  }
+
+  .map-popup-title { font-weight: 600; font-size: 0.9rem; }
+  .map-popup-ip { font-family: ui-monospace, monospace; font-size: 0.7rem; color: var(--ink-muted); margin-top: 0.1rem; }
+  .map-popup-list { list-style: none; margin: 0.6rem 0 0; padding: 0; max-height: 14rem; overflow-y: auto; }
+  .map-popup-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; border-top: 1px solid var(--line); }
+  .map-popup-item:first-child { border-top: 0; }
+  .map-popup-state { width: 0.5rem; height: 0.5rem; border-radius: 9999px; flex: none; background-color: var(--good); }
+  .map-popup-state.is-crit { background-color: var(--crit); }
+  .map-popup-state.is-down { background-color: var(--neutral); }
+  .map-popup-name { flex: 1; min-width: 0; font-size: 0.78rem; line-height: 1.15; }
+  .map-popup-name a { color: var(--ink); font-weight: 600; text-decoration: none; }
+  .map-popup-name a:hover { color: var(--brand-ink); text-decoration: underline; }
+  .map-popup-links { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }
+  .map-popup-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    background-color: var(--brand-soft);
+    color: var(--brand-ink);
+    text-decoration: none;
+  }
+  .map-popup-link:hover { opacity: 0.8; }
+  .map-popup-link svg { flex: none; }
+  .map-popup-note { font-size: 0.7rem; color: var(--ink-muted); font-weight: 600; }
+}
+
+/* Unlayered: maplibre-gl.css loads after this file and is itself unlayered,
+   so an override inside @layer components would lose to the vendor's rules
+   regardless of specificity or source order. Same pattern as the reference
+   platform's map theming. */
+.maplibregl-popup .maplibregl-popup-content {
+  background-color: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-pop);
+  padding: 0.875rem 1rem;
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--surface);
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--surface);
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--surface); }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--surface); }
+.maplibregl-popup .maplibregl-popup-close-button {
+  color: var(--ink-muted);
+  font-size: 1.1rem;
+  padding-right: 0.35rem;
+  background: transparent;
+}
+.maplibregl-popup .maplibregl-popup-close-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--ink);
+}
+.maplibregl-ctrl-group {
+  background-color: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+.maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+.maplibregl-map .maplibregl-ctrl-attrib,
+.maplibregl-map .maplibregl-ctrl-attrib.maplibregl-compact {
+  background-color: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--ink-muted);
+}
+.maplibregl-map .maplibregl-ctrl-attrib a { color: var(--ink-muted); }
+.maplibregl-map .maplibregl-ctrl-scale {
+  background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+  border-color: var(--line-strong);
+  color: var(--ink-secondary);
 }
 
 @keyframes shimmer {

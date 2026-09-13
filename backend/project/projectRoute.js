@@ -1,10 +1,11 @@
 const express = require('express');
 const projectController = require('./projectController');
 const { authenticate, requireAdmin, requireProjectAccess } = require('../middlewares/auth');
+const licenceGuard = require('../middlewares/licenceGuard');
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(licenceGuard, authenticate);
 
 router.post('', requireAdmin, projectController.addProject);
 router.get('', projectController.getAllProjects);

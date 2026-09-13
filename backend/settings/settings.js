@@ -10,6 +10,16 @@ const settingsSchema = mongoose.Schema(
     _id: { type: String, default: 'singleton' },
     pollIntervalSeconds: { type: Number, default: () => config.pollIntervalSeconds },
     defaultSnmpCommunity: { type: String, default: () => config.defaultSnmpCommunity },
+
+    smtpHost: { type: String, default: '' },
+    smtpPort: { type: Number, default: 587 },
+    smtpSecure: { type: Boolean, default: false },
+    smtpUser: { type: String, default: '' },
+    // Never returned by a default query — same guarantee as Member.password.
+    smtpPass: { type: String, default: '', select: false },
+    smtpPassSet: { type: Boolean, default: false },
+    smtpFromName: { type: String, default: 'Orange Traffic' },
+    smtpFromEmail: { type: String, default: '' },
   },
   { timestamps: true }
 );

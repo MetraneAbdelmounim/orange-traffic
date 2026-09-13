@@ -10,6 +10,10 @@ const memberSchema = mongoose.Schema(
     actif: { type: Boolean, default: false },
     mustChangePassword: { type: Boolean, default: true },
     projects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Project', index: true }],
+    email: { type: String, trim: true, lowercase: true, default: '' },
+    // Opt-in, like projet-youness's Member.notification — a member receives
+    // no alert email until they (or an admin) turn this on explicitly.
+    notifyOnCritical: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Project = require('./project');
 const Member = require('../member/member');
 const asyncHandler = require('../middlewares/asyncHandler');
@@ -21,11 +22,54 @@ module.exports = {
       .json({ message: 'Un nouveau projet a été ajouté avec succès !', project });
   }),
 
-  /** Only the projects the caller belongs to; admins see all. */
+  /**
+   * Only the projects the caller belongs to; admins see all. Enriched with
+   * per-project controller counts (total / in alarm / unreachable) via a
+   * single aggregation, so the projects list can show a live health summary
+   * on every card without an extra round trip per project.
+   */
   getAllProjects: asyncHandler(async (req, res) => {
     const allowed = accessibleProjectIds(req.member);
-    const filter = allowed === null ? {} : { _id: { $in: allowed } };
-    const projects = await Project.find(filter).sort({ nom: 1 }).lean();
+    const match =
+      allowed === null ? {} : { _id: { $in: allowed.map((id) => new mongoose.Types.ObjectId(id)) } };
+
+    const projects = await Project.aggregate([
+      { $match: match },
+      { $sort: { nom: 1 } },
+      {
+        $lookup: {
+          from: 'controllers',
+          localField: '_id',
+          foreignField: 'project',
+          as: 'controllers',
+        },
+      },
+      {
+        $addFields: {
+          controllerCount: { $size: '$controllers' },
+          offlineCount: {
+            $size: {
+              $filter: {
+                input: '$controllers',
+                as: 'c',
+                cond: { $eq: ['$$c.status', false] },
+              },
+            },
+          },
+          alarmCount: {
+            $size: {
+              $filter: {
+                input: '$controllers',
+                as: 'c',
+                cond: { $gt: [{ $size: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] } }, 0] },
+              },
+            },
+          },
+        },
+      },
+      { $project: { controllers: 0 } },
+    ]);
+
     return res.status(200).json(projects);
   }),
 

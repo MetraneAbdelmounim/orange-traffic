@@ -1,5 +1,13 @@
 import { Project } from './project';
 
+export interface AlarmDetail {
+  label: string;
+  bit: number;
+  value: number;
+  sourceObject: 'unitAlarmStatus1' | 'unitAlarmStatus2' | 'shortAlarmStatus';
+  criticality: 'critical' | 'warning';
+}
+
 export interface ControllerSnapshot {
   reachable: boolean;
   measuredAt: string | null;
@@ -11,6 +19,8 @@ export interface ControllerSnapshot {
   shortAlarmStatus: number | null;
   /** Always an array — decoded flag names, never a raw integer. Empty = no alarm. */
   activeFlags: string[];
+  /** Structured version of activeFlags — bit, source object and criticality per active alarm. */
+  alarms: AlarmDetail[];
   /** Best-effort NTCIP groups, null when unsupported on this firmware. */
   phaseStatus: Record<string, number | null> | null;
   detectorStatus: Record<string, number | null> | null;

@@ -25,6 +25,11 @@ const snapshotSchema = new mongoose.Schema(
     unitAlarmStatus2: { type: Number, default: null },
     shortAlarmStatus: { type: Number, default: null },
     activeFlags: { type: [String], default: [] },
+    // Structured version of activeFlags: one entry per active bit, carrying
+    // the NTCIP object it came from and its client-defined criticality tier
+    // (only shortAlarmStatus bit 7 is "critical", everything else "warning")
+    // — lets the UI render severity without re-deriving it from the label text.
+    alarms: { type: [mongoose.Schema.Types.Mixed], default: [] },
 
     // Best-effort NTCIP 1202 object groups. Structure documented by the
     // standard but not confirmed supported on every ATC-1500 firmware — the

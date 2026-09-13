@@ -42,13 +42,26 @@ UNIT_ALARM_STATUS_1_BITS = {
     0: "Cycle Fault - défaut de cycle",
 }
 
-# Table non confirmée officiellement par le client - à valider si besoin de certitude
+# Table officielle fournie par le client. Bits 5-7 = Reserved, volontairement
+# absents (jamais affichés comme alarme utilisateur).
 UNIT_ALARM_STATUS_2_BITS = {
-    4: "Stop Time",
-    3: "External Start",
-    2: "Response Fault",
-    1: "Low Battery",
-    0: "Power Restart",
+    4: "Stop Time - entrée Stop Time active",
+    3: "External Start - entrée External Start active",
+    2: "Response Fault - défaut de réponse NEMA TS2 Port 1",
+    1: "Low Battery - tension batterie trop faible",
+    0: "Power Restart - alimentation revenue après interruption",
+}
+
+# Table officielle fournie par le client (résumé rapide des alarmes).
+SHORT_ALARM_STATUS_BITS = {
+    7: "Critical Alarm - Stop Time actif",
+    6: "Non-Critical Alarm - entrée d'alarme physique active",
+    5: "Detector Fault - défaut détecteur",
+    4: "Coordination Alarm - problème de coordination",
+    3: "Local Override - override/local control",
+    2: "Local Cycle Zero - cycle local passé par zéro",
+    1: "T&F Flash - Local Flash ou MMU Flash actif",
+    0: "Preempt - préemption active",
 }
 
 
@@ -107,8 +120,13 @@ async def main():
         if err:
             print(f"shortAlarmStatus: ERREUR -> {err}")
         else:
+            active = decode_bits(value, SHORT_ALARM_STATUS_BITS)
             print(f"shortAlarmStatus = {value} (0b{value:08b})")
-            print("    (aucune alarme active)" if value == 0 else "    [!] Alarme(s) active(s) - voir unitAlarmStatus1/2 pour détail")
+            if active:
+                for a in active:
+                    print(f"    [X] {a}")
+            else:
+                print("    (aucune alarme active)")
 
     finally:
         dispatcher.transport_dispatcher.close_dispatcher()

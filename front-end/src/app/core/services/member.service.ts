@@ -11,11 +11,11 @@ export class MemberService {
     return this.http.get<Member[]>('/api/members');
   }
 
-  add(data: { username: string; isAdmin: boolean; projects: string[] }) {
+  add(data: { username: string; isAdmin: boolean; projects: string[]; email?: string; notifyOnCritical?: boolean }) {
     return this.http.post<{ member: Member; temporaryPassword: string }>('/api/members', data);
   }
 
-  update(id: string, data: Partial<Pick<Member, 'isAdmin'>> & { projects?: string[] }) {
+  update(id: string, data: Partial<Pick<Member, 'isAdmin' | 'email' | 'notifyOnCritical'>> & { projects?: string[] }) {
     return this.http.put<{ member: Member }>(`/api/members/${id}`, data);
   }
 

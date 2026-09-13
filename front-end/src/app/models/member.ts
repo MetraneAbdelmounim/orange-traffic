@@ -5,5 +5,7 @@ export interface Member {
   actif: boolean;
   mustChangePassword: boolean;
   projects: Array<{ _id: string; nom: string }>;
+  email: string;
+  notifyOnCritical: boolean;
   createdAt?: string;
 }
