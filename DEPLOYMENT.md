@@ -120,11 +120,11 @@ docker compose exec app node tools/seed-admin.js admin "un-mot-de-passe-solide"
 
 ---
 
-## 6. Ouvrir le pare-feu pour 8080/8443
+## 6. Ouvrir le pare-feu pour 18080/18443
 
 ```powershell
-New-NetFirewallRule -DisplayName "Orange Traffic HTTP" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
-New-NetFirewallRule -DisplayName "Orange Traffic HTTPS" -Direction Inbound -Protocol TCP -LocalPort 8443 -Action Allow
+New-NetFirewallRule -DisplayName "Orange Traffic HTTP" -Direction Inbound -Protocol TCP -LocalPort 18080 -Action Allow
+New-NetFirewallRule -DisplayName "Orange Traffic HTTPS" -Direction Inbound -Protocol TCP -LocalPort 18443 -Action Allow
 ```
 
 ---
@@ -132,12 +132,12 @@ New-NetFirewallRule -DisplayName "Orange Traffic HTTPS" -Direction Inbound -Prot
 ## 7. Vérifier
 
 ```powershell
-curl.exe -sk https://VPS_IP:8443/api/health        # {"status":"ok","db":"connected"}
+curl.exe -sk https://VPS_IP:18443/api/health        # {"status":"ok","db":"connected"}
 docker compose logs --tail=30 poller               # "Sweep finished in Xs (N controllers)"
 docker exec orange-traffic-poller ping -c 2 10.8.3.20   # le poller doit joindre le réseau des contrôleurs
 ```
 
-Dans le navigateur, `https://VPS_IP:8443/` (accepter l'avertissement de
+Dans le navigateur, `https://VPS_IP:18443/` (accepter l'avertissement de
 certificat) :
 
 - [ ] connexion avec le compte admin créé à l'étape 5

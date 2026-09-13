@@ -1,3 +1,17 @@
+# Explicit project name — do not remove.
+#
+# Both this repo and project-youness keep their compose file in a folder
+# literally named "backend". Docker Compose derives its project name (and,
+# critically, its build image tags: "<project>-<service>") from that folder
+# name by default when none is given — so without this line, deploying this
+# stack on a host that already runs project-youness silently collides on
+# EVERY identifier Compose uses for ownership: same project "backend", same
+# service names (mongo/app/poller/proxy), same image tags. `docker compose up`
+# then treats this stack as an update to the OTHER app and replaces its
+# containers and images with this one's. That is exactly what took
+# project-youness down on 2026-09-13's first deploy attempt.
+name: orange-traffic
+
 services:
   mongo:
     image: mongo:7
@@ -54,6 +68,7 @@ services:
       retries: 3
 
   proxy:
+    container_name: orange-traffic-proxy
     restart: always
     build:
       context: ..

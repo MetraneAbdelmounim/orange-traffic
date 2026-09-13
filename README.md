@@ -77,7 +77,7 @@ premier accès). Créer le compte admin une fois les conteneurs démarrés :
 docker compose exec app node tools/seed-admin.js admin "un-mot-de-passe-solide"
 ```
 
-Le proxy publie `8080` (HTTP → redirige vers HTTPS) et `8443` (HTTPS) plutôt
+Le proxy publie `18080` (HTTP → redirige vers HTTPS) et `18443` (HTTPS) plutôt
 que `80`/`443`, pour cohabiter sur un serveur où ces ports sont déjà pris par
 une autre application — changez-les dans `backend/docker-compose.yml` si ce
 n'est pas votre cas. Pour un déploiement aux côtés de project-youness sur le
