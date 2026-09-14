@@ -195,6 +195,7 @@ button {
   .card-accent.is-crit { border-top-color: var(--crit); }
   .card-accent.is-good { border-top-color: var(--good); }
   .card-accent.is-neutral { border-top-color: var(--line-strong); }
+  .card-accent.is-maintenance { border-top-color: var(--warn); }
 
   /* Icon badge used in page heros, stat tiles and empty states. Defaults to
      the brand tint; `.tone-*` overrides let a badge borrow the same
@@ -214,6 +215,7 @@ button {
   .icon-badge.tone-good { background-color: var(--good-soft); color: var(--good); }
   .icon-badge.tone-crit { background-color: var(--crit-soft); color: var(--crit); }
   .icon-badge.tone-neutral { background-color: var(--neutral-soft); color: var(--neutral); }
+  .icon-badge.tone-warn { background-color: var(--warn-soft); color: var(--warn); }
 
   .value-good { color: var(--good); }
   .value-crit { color: var(--crit); }
@@ -401,6 +403,7 @@ button {
   .signal-label.is-warn { color: var(--warn); }
   .signal-label.is-good { color: var(--good); }
   .signal-label.is-neutral { color: var(--ink-muted); }
+  .signal-label.is-maintenance { color: var(--warn); }
 
   /* --- Project map (MapLibre) ---------------------------------------------
      Pins and popups are created imperatively by MapLibre, outside Angular's
@@ -423,6 +426,7 @@ button {
   }
   .map-pin.is-crit { background-color: var(--crit); }
   .map-pin.is-down { background-color: var(--neutral); }
+  .map-pin.is-maintenance { background-color: var(--warn); }
   .map-pin.is-group {
     width: 1.85rem;
     height: 1.85rem;
@@ -447,6 +451,7 @@ button {
   .map-popup-state { width: 0.5rem; height: 0.5rem; border-radius: 9999px; flex: none; background-color: var(--good); }
   .map-popup-state.is-crit { background-color: var(--crit); }
   .map-popup-state.is-down { background-color: var(--neutral); }
+  .map-popup-state.is-maintenance { background-color: var(--warn); }
   .map-popup-name { flex: 1; min-width: 0; font-size: 0.78rem; line-height: 1.15; }
   .map-popup-name a { color: var(--ink); font-weight: 600; text-decoration: none; }
   .map-popup-name a:hover { color: var(--brand-ink); text-decoration: underline; }

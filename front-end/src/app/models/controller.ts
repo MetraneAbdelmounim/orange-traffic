@@ -26,6 +26,19 @@ export interface ControllerSnapshot {
   detectorStatus: Record<string, number | null> | null;
 }
 
+export interface MaintenanceInfo {
+  note: string | null;
+  by: string | null;
+  at: string | null;
+}
+
+export interface AcknowledgmentInfo {
+  flagsSnapshot: string | null;
+  note: string | null;
+  by: string | null;
+  at: string | null;
+}
+
 export interface Controller {
   _id: string;
   project: Project | string | null;
@@ -40,6 +53,31 @@ export interface Controller {
   lastSeenAt: string | null;
   createdAt?: string;
   updatedAt?: string;
+  maintenanceMode: boolean;
+  maintenance: MaintenanceInfo;
+  /** Derived server-side: true only while acknowledgment.flagsSnapshot still matches the current alarm condition. */
+  acknowledged: boolean;
+  acknowledgment: AcknowledgmentInfo;
+}
+
+export interface ProjectKpiControllerRow {
+  controllerId: string;
+  nom: string;
+  maintenanceMode: boolean;
+  /** null when there is no reading data for the period (new controller, or past the retention window). */
+  uptimePercent: number | null;
+  alarmCount: number;
+}
+
+export interface ProjectKpi {
+  days: number;
+  generatedAt: string;
+  summary: {
+    avgUptimePercent: number | null;
+    totalAlarmCount: number;
+    controllerCount: number;
+  };
+  controllers: ProjectKpiControllerRow[];
 }
 
 export interface ControllerHistory {

@@ -10,6 +10,7 @@ router.use(licenceGuard, authenticate, requirePasswordChanged);
 router.post('', requireAdmin, projectController.addProject);
 router.get('', projectController.getAllProjects);
 router.get('/:idProject', requireProjectAccess(), projectController.getProjectByID);
+router.get('/:idProject/kpi', requireProjectAccess(), projectController.getProjectKpi);
 router.delete('/:idProject', requireAdmin, projectController.deleteProject);
 router.put('/:idProject', requireAdmin, projectController.updateProject);
 

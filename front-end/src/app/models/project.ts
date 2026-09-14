@@ -8,4 +8,5 @@ export interface Project {
   controllerCount?: number;
   alarmCount?: number;
   offlineCount?: number;
+  maintenanceCount?: number;
 }

@@ -92,6 +92,8 @@ export const fr = {
   'status.activeAlarmsCount': '{count} alarmes actives',
   'status.noSnmpResponse': 'Aucune réponse SNMP',
   'status.noActiveAlarm': 'Aucune alarme active',
+  'status.maintenance': 'Maintenance',
+  'status.maintenanceTooltip': 'Ce contrôleur est en mode maintenance — alarmes et e-mails suspendus',
 
   'users.title': 'Membres',
   'users.accountCount': 'compte(s)',
@@ -218,6 +220,8 @@ export const fr = {
 
   'projectDetail.hideMap': 'Masquer la carte',
   'projectDetail.map': 'Carte',
+  'projectDetail.kpi': 'Disponibilité',
+  'projectDetail.hideKpi': 'Masquer la disponibilité',
   'projectDetail.noControllers': 'Aucun contrôleur dans ce projet',
   'projectDetail.streetView': 'Street View',
   'projectDetail.controllerLink': 'Contrôleur',
@@ -266,12 +270,30 @@ export const fr = {
   'controllerDetail.cleared': 'Disparue',
   'controllerDetail.chartValue': 'Valeur',
   'controllerDetail.chartNoAlarm': 'aucune alarme',
+  'controllerDetail.acknowledge': 'Prise en compte',
+  'controllerDetail.unacknowledge': 'Annuler la prise en compte',
+  'controllerDetail.acknowledgedBy': 'Pris en compte par {by} · {at}',
+  'controllerDetail.enableMaintenance': 'Mode maintenance',
+  'controllerDetail.disableMaintenance': 'Désactiver la maintenance',
+  'controllerDetail.maintenanceActive': 'En maintenance depuis {at}',
+  'controllerDetail.noteOptional': 'Note (optionnelle)',
+  'controllerDetail.actionFailed': 'Échec de l’action',
 
   'history.24h': '24 heures',
   'history.1w': '1 semaine',
   'history.2w': '2 semaines',
   'history.3w': '3 semaines',
   'history.4w': '4 semaines',
+
+  'kpi.period7d': '7 jours',
+  'kpi.period30d': '30 jours',
+  'kpi.period90d': '90 jours',
+  'kpi.availability': 'Disponibilité moyenne',
+  'kpi.alarmFrequency': 'Alarmes sur la période',
+  'kpi.controllerCount': 'Contrôleurs',
+  'kpi.noData': 'Pas de données',
+  'kpi.uptimeColumn': 'Disponibilité',
+  'kpi.alarmsColumn': 'Alarmes',
 } as const;
 
 export type TranslationKey = keyof typeof fr;

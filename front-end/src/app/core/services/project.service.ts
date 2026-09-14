@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { ProjectKpi } from '../../models/controller';
 import { Project } from '../../models/project';
 
 @Injectable({ providedIn: 'root' })
@@ -9,6 +10,10 @@ export class ProjectService {
 
   getAll(): Observable<Project[]> {
     return this.http.get<Project[]>('/api/projects');
+  }
+
+  getKpi(id: string, days = 30): Observable<ProjectKpi> {
+    return this.http.get<ProjectKpi>(`/api/projects/${id}/kpi`, { params: { days: String(days) } });
   }
 
   getById(id: string): Observable<Project> {

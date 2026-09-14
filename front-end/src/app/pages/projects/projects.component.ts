@@ -83,6 +83,9 @@ const TRASH_ICON = `<svg class="h-4 w-4" fill="none" stroke="currentColor" strok
                     @if (project.offlineCount) {
                       <span class="chip chip-warn"><span class="chip-dot"></span>{{ project.offlineCount }} {{ 'projects.unreachableWord' | t }}{{ project.offlineCount === 1 ? '' : 's' }}</span>
                     }
+                    @if (project.maintenanceCount) {
+                      <span class="chip chip-warn"><span class="chip-dot"></span>{{ project.maintenanceCount }} {{ 'status.maintenance' | t }}</span>
+                    }
                   </div>
                 }
               </a>

@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, QueryList, ViewChildren, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
 import { Subscription, catchError, exhaustMap, of } from 'rxjs';
@@ -12,15 +13,18 @@ import {
   translateAlarmLabel,
 } from '../../core/alarm-bits';
 import { refreshWhileVisible } from '../../core/auto-refresh';
+import { AuthService } from '../../core/services/auth.service';
 import { ControllerService } from '../../core/services/controller.service';
+import { translateApiError } from '../../i18n/backend-errors';
 import { I18nService, Language } from '../../i18n/i18n.service';
 import { TranslatePipe } from '../../i18n/translate.pipe';
-import { TranslationKey } from '../../i18n/fr';
+import { fr, TranslationKey } from '../../i18n/fr';
 import { AlarmEvent } from '../../models/alarm-event';
 import { Controller, ControllerHistory } from '../../models/controller';
 import { Project } from '../../models/project';
 import { ChartImage, downloadSingleControllerReport } from './controller-report-single';
 import { LiveIndicatorComponent } from '../../ui/live-indicator.component';
+import { ModalComponent } from '../../ui/modal.component';
 import { SafeHtmlPipe } from '../../ui/safe-html.pipe';
 import { SignalBadgeComponent } from '../../ui/signal-badge.component';
 import { StatTileComponent } from '../../ui/stat-tile.component';
@@ -96,7 +100,7 @@ function formatUptime(ticks: number | null, lang: Language): string {
 @Component({
   selector: 'app-controller-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, SignalBadgeComponent, StatTileComponent, SafeHtmlPipe, LiveIndicatorComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, SignalBadgeComponent, StatTileComponent, SafeHtmlPipe, LiveIndicatorComponent, ModalComponent, TranslatePipe],
   template: `
     @if (controller(); as c) {
       <div class="max-w-6xl mx-auto px-4 py-8 flex flex-col gap-6">
@@ -113,8 +117,8 @@ function formatUptime(ticks: number | null, lang: Language): string {
               <p class="text-sm text-ink-muted font-mono mt-1">{{ c.ip }}:{{ c.port }} · {{ c.model }}</p>
             </div>
           </div>
-          <div class="flex items-center gap-3">
-            <app-signal-badge [snapshot]="c.lastSnapshot" [reachable]="c.status" />
+          <div class="flex flex-wrap items-center gap-3">
+            <app-signal-badge [snapshot]="c.lastSnapshot" [reachable]="c.status" [maintenance]="c.maintenanceMode" />
             <button type="button" class="btn btn-ghost" [disabled]="reportBusy()" (click)="downloadReport(c)">
               <span [innerHTML]="icon.chart | safeHtml"></span>
               {{ (reportBusy() ? 'common.loading' : 'controllerDetail.downloadReport') | t }}
@@ -124,6 +128,47 @@ function formatUptime(ticks: number | null, lang: Language): string {
             </button>
           </div>
         </div>
+
+        @if (hasActiveIssue(c) || c.acknowledged || c.maintenanceMode || auth.isAdmin()) {
+          <div class="card p-4 flex flex-wrap items-center gap-3">
+            @if (c.acknowledged) {
+              <span class="chip chip-neutral">
+                <span class="chip-dot"></span>
+                {{ 'controllerDetail.acknowledgedBy' | t: { by: c.acknowledgment.by || '—', at: formatDate(c.acknowledgment.at) } }}
+              </span>
+              <button type="button" class="btn btn-ghost" [disabled]="ackBusy()" (click)="cancelAcknowledgment()">
+                {{ 'controllerDetail.unacknowledge' | t }}
+              </button>
+            } @else if (hasActiveIssue(c)) {
+              <button type="button" class="btn btn-ghost" [disabled]="ackBusy()" (click)="ackNote = ''; showAckModal.set(true)">
+                {{ 'controllerDetail.acknowledge' | t }}
+              </button>
+            }
+
+            @if (c.maintenanceMode) {
+              <span class="chip chip-warn">
+                <span class="chip-dot"></span>
+                {{ 'controllerDetail.maintenanceActive' | t: { at: formatDate(c.maintenance.at) } }}
+                @if (c.maintenance.note) {
+                  — {{ c.maintenance.note }}
+                }
+              </span>
+              @if (auth.isAdmin()) {
+                <button type="button" class="btn btn-ghost" [disabled]="maintenanceBusy()" (click)="disableMaintenance()">
+                  {{ 'controllerDetail.disableMaintenance' | t }}
+                </button>
+              }
+            } @else if (auth.isAdmin()) {
+              <button type="button" class="btn btn-ghost" [disabled]="maintenanceBusy()" (click)="maintenanceNote = ''; showMaintenanceModal.set(true)">
+                {{ 'controllerDetail.enableMaintenance' | t }}
+              </button>
+            }
+
+            @if (actionError()) {
+              <p class="chip chip-crit self-start"><span class="chip-dot"></span>{{ actionError() }}</p>
+            }
+          </div>
+        }
 
         <div class="grid gap-4 sm:grid-cols-3">
           <app-stat-tile
@@ -258,6 +303,32 @@ function formatUptime(ticks: number | null, lang: Language): string {
           }
         </div>
       </div>
+
+      <app-modal [open]="showAckModal()" [title]="'controllerDetail.acknowledge' | t" size="sm" (closed)="showAckModal.set(false)">
+        <div>
+          <label class="label" for="ackNote">{{ 'controllerDetail.noteOptional' | t }}</label>
+          <textarea id="ackNote" name="ackNote" class="field" rows="3" [(ngModel)]="ackNote"></textarea>
+        </div>
+        <ng-container modalFooter>
+          <button type="button" class="btn btn-ghost" (click)="showAckModal.set(false)">{{ 'common.cancel' | t }}</button>
+          <button type="button" class="btn btn-primary" [disabled]="ackBusy()" (click)="confirmAcknowledge()">
+            {{ (ackBusy() ? 'common.loading' : 'common.confirm') | t }}
+          </button>
+        </ng-container>
+      </app-modal>
+
+      <app-modal [open]="showMaintenanceModal()" [title]="'controllerDetail.enableMaintenance' | t" size="sm" (closed)="showMaintenanceModal.set(false)">
+        <div>
+          <label class="label" for="maintenanceNote">{{ 'controllerDetail.noteOptional' | t }}</label>
+          <textarea id="maintenanceNote" name="maintenanceNote" class="field" rows="3" [(ngModel)]="maintenanceNote"></textarea>
+        </div>
+        <ng-container modalFooter>
+          <button type="button" class="btn btn-ghost" (click)="showMaintenanceModal.set(false)">{{ 'common.cancel' | t }}</button>
+          <button type="button" class="btn btn-primary" [disabled]="maintenanceBusy()" (click)="confirmEnableMaintenance()">
+            {{ (maintenanceBusy() ? 'common.loading' : 'common.confirm') | t }}
+          </button>
+        </ng-container>
+      </app-modal>
     }
   `,
 })
@@ -266,6 +337,7 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
   private controllerService = inject(ControllerService);
   private alarmEventService = inject(AlarmEventService);
   private i18n = inject(I18nService);
+  auth = inject(AuthService);
 
   icon = ICON;
   ranges = HISTORY_RANGES;
@@ -355,8 +427,88 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
 
   reportBusy = signal(false);
 
+  showAckModal = signal(false);
+  ackBusy = signal(false);
+  ackNote = '';
+  showMaintenanceModal = signal(false);
+  maintenanceBusy = signal(false);
+  maintenanceNote = '';
+  actionError = signal<string | null>(null);
+
   translatedAlarmLabel(label: string): string {
     return translateAlarmLabel(label, this.i18n.lang());
+  }
+
+  hasActiveIssue(c: Controller): boolean {
+    return c.lastSnapshot.alarms.length > 0 || !c.status;
+  }
+
+  formatDate(iso: string | null): string {
+    if (!iso) return '—';
+    const locale = this.i18n.lang() === 'fr' ? 'fr-CA' : 'en-US';
+    return new Date(iso).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  confirmAcknowledge(): void {
+    this.ackBusy.set(true);
+    this.actionError.set(null);
+    this.controllerService.setAcknowledgment(this.controllerId, true, this.ackNote).subscribe({
+      next: (c) => {
+        this.controller.set(c);
+        this.ackBusy.set(false);
+        this.showAckModal.set(false);
+      },
+      error: (err) => {
+        this.ackBusy.set(false);
+        this.actionError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('controllerDetail.actionFailed'));
+      },
+    });
+  }
+
+  cancelAcknowledgment(): void {
+    this.ackBusy.set(true);
+    this.actionError.set(null);
+    this.controllerService.setAcknowledgment(this.controllerId, false).subscribe({
+      next: (c) => {
+        this.controller.set(c);
+        this.ackBusy.set(false);
+      },
+      error: (err) => {
+        this.ackBusy.set(false);
+        this.actionError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('controllerDetail.actionFailed'));
+      },
+    });
+  }
+
+  confirmEnableMaintenance(): void {
+    this.maintenanceBusy.set(true);
+    this.actionError.set(null);
+    this.controllerService.setMaintenance(this.controllerId, true, this.maintenanceNote).subscribe({
+      next: (c) => {
+        this.controller.set(c);
+        this.maintenanceBusy.set(false);
+        this.showMaintenanceModal.set(false);
+      },
+      error: (err) => {
+        this.maintenanceBusy.set(false);
+        this.actionError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('controllerDetail.actionFailed'));
+      },
+    });
+  }
+
+  disableMaintenance(): void {
+    this.maintenanceBusy.set(true);
+    this.actionError.set(null);
+    this.controllerService.setMaintenance(this.controllerId, false).subscribe({
+      next: (c) => {
+        this.controller.set(c);
+        this.maintenanceBusy.set(false);
+      },
+      error: (err) => {
+        this.maintenanceBusy.set(false);
+        this.actionError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('controllerDetail.actionFailed'));
+      },
+    });
   }
 
   /**
@@ -368,16 +520,20 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
   async downloadReport(controller: Controller): Promise<void> {
     this.reportBusy.set(true);
     try {
+      // The report document itself is always produced in French (its static
+      // labels are hardcoded French), so every dynamic value fed into it is
+      // resolved against the French dictionary directly — regardless of the
+      // UI's current language — to avoid a mixed-language PDF.
       const canvases = this.chartCanvases?.toArray() ?? [];
       const charts: ChartImage[] = HISTORY_CHARTS.map((def, i) => {
         const canvas = canvases[i]?.nativeElement;
-        const title = def.titleKey ? this.i18n.t(def.titleKey) : def.key;
+        const title = def.titleKey ? fr[def.titleKey] : def.key;
         return canvas ? { title, dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height } : null;
       }).filter((c): c is ChartImage => c !== null);
 
       const project = controller.project && typeof controller.project === 'object' ? (controller.project as Project) : null;
       const periodLabel = this.ranges.find((r) => r.hours === this.historyHours())?.key;
-      const periodText = periodLabel ? this.i18n.t(periodLabel) : this.i18n.t('history.24h');
+      const periodText = periodLabel ? fr[periodLabel] : fr['history.24h'];
 
       await downloadSingleControllerReport(controller, project, charts, periodText);
     } finally {

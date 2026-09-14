@@ -4,6 +4,7 @@ const AlertState = require('./alertState');
 const mailer = require('./mailer');
 const { buildAlertEmail } = require('./emailTemplate');
 const { accessibleProjectIds } = require('../middlewares/auth');
+const { flagsKey } = require('../controller/flagsKey');
 
 // 12h, matching projet-youness's default reminder interval — not exposed as
 // a setting since the brief doesn't ask for one.
@@ -19,11 +20,6 @@ function worstCriticality(alarms) {
 function isAffected(c) {
   const alarms = c.lastSnapshot?.alarms || [];
   return alarms.some((a) => a.criticality === 'critical') || !c.status;
-}
-
-function flagsKey(c) {
-  const labels = (c.lastSnapshot?.alarms || []).map((a) => a.label).sort();
-  return (c.status ? [] : ['OFFLINE']).concat(labels).join('|');
 }
 
 async function isDue(controllerId, currentKey) {
@@ -52,7 +48,11 @@ async function recipientsForProject(projectId) {
  * covering every affected/alarmed controller in that project.
  */
 async function runAlertSweep() {
-  const controllers = await Controller.find({}).populate('project').lean();
+  // Controllers under maintenance are fully excluded — never emailed about,
+  // regardless of what their alarms/reachability look like.
+  const controllers = await Controller.find({ maintenanceMode: { $ne: true } })
+    .populate('project')
+    .lean();
 
   // A controller that has recovered gets its dedup state cleared so a future
   // fault is treated as new rather than suppressed by a stale cooldown.

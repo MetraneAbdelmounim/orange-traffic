@@ -5,6 +5,7 @@ const Reading = require('./reading');
 const AlarmEvent = require('./alarmEvent');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { accessibleProjectIds } = require('../middlewares/auth');
+const { flagsKey } = require('./flagsKey');
 
 const PY_BASE = `http://${config.HOST_PY}:${config.PORT_PY}`;
 const CONTROL_TIMEOUT_MS = Number(process.env.CONTROL_TIMEOUT_MS) || 15000;
@@ -23,6 +24,12 @@ function scopeToMember(filter, member) {
   const allowed = accessibleProjectIds(member);
   if (allowed === null) return filter; // admin
   return { ...filter, project: { $in: allowed } };
+}
+
+/** An ack is only still valid while it matches the controller's current alarm condition. */
+function withAcknowledged(c) {
+  const acknowledged = !!c.acknowledgment?.flagsSnapshot && c.acknowledgment.flagsSnapshot === flagsKey(c);
+  return { ...c, acknowledged };
 }
 
 module.exports = {
@@ -66,7 +73,7 @@ module.exports = {
       .populate('project')
       .sort({ nom: 1 })
       .lean();
-    return res.status(200).json(controllers);
+    return res.status(200).json(controllers.map(withAcknowledged));
   }),
 
   /** Every controller the caller is allowed to see. */
@@ -75,7 +82,7 @@ module.exports = {
       .populate('project')
       .sort({ nom: 1 })
       .lean();
-    return res.status(200).json(controllers);
+    return res.status(200).json(controllers.map(withAcknowledged));
   }),
 
   getControllerById: asyncHandler(async (req, res) => {
@@ -85,7 +92,7 @@ module.exports = {
       .populate('project')
       .lean();
     if (!controller) return res.status(404).json({ error: 'Contrôleur introuvable' });
-    return res.status(200).json(controller);
+    return res.status(200).json(withAcknowledged(controller));
   }),
 
   /**
@@ -164,5 +171,57 @@ module.exports = {
       console.error(`Immediate poll failed for ${controller.nom} (${controller.ip}):`, err.message);
       return res.status(502).json({ error: `Impossible de sonder ${controller.nom}` });
     }
+  }),
+
+  /**
+   * Admin-only: fully suppresses this controller from alertJob's sweep and
+   * switches its UI badge to a neutral "maintenance" state, regardless of
+   * whatever alarms/reachability it actually reports underneath.
+   */
+  setMaintenance: asyncHandler(async (req, res) => {
+    const enabled = !!req.body.enabled;
+    const note = typeof req.body.note === 'string' ? req.body.note.trim().slice(0, 500) : null;
+    const controller = await Controller.findByIdAndUpdate(
+      req.params.idController,
+      {
+        $set: {
+          maintenanceMode: enabled,
+          maintenance: enabled ? { note, by: req.member.username, at: new Date() } : { note: null, by: null, at: null },
+        },
+      },
+      { new: true }
+    )
+      .populate('project')
+      .lean();
+    if (!controller) return res.status(404).json({ error: 'Contrôleur introuvable' });
+    return res.status(200).json(withAcknowledged(controller));
+  }),
+
+  /**
+   * Any member with access to the controller's project may acknowledge —
+   * this is a visibility/workflow aid, not an admin permission, and does not
+   * affect alert emails (those keep following their own 12h cooldown).
+   */
+  setAcknowledgment: asyncHandler(async (req, res) => {
+    const acknowledged = !!req.body.acknowledged;
+    const note = typeof req.body.note === 'string' ? req.body.note.trim().slice(0, 500) : null;
+
+    const existing = await Controller.findOne(scopeToMember({ _id: req.params.idController }, req.member)).lean();
+    if (!existing) return res.status(404).json({ error: 'Contrôleur introuvable' });
+
+    const controller = await Controller.findByIdAndUpdate(
+      req.params.idController,
+      {
+        $set: {
+          acknowledgment: acknowledged
+            ? { flagsSnapshot: flagsKey(existing), note, by: req.member.username, at: new Date() }
+            : { flagsSnapshot: null, note: null, by: null, at: null },
+        },
+      },
+      { new: true }
+    )
+      .populate('project')
+      .lean();
+    return res.status(200).json(withAcknowledged(controller));
   }),
 };

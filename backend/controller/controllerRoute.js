@@ -22,6 +22,9 @@ router.get('/events/:idController', controllerController.getAlarmEventsByControl
 
 router.post('/poll/:idController', controllerController.pollController);
 
+router.put('/maintenance/:idController', requireAdmin, controllerController.setMaintenance);
+router.put('/acknowledge/:idController', controllerController.setAcknowledgment);
+
 router.delete('/:idController', requireAdmin, controllerController.deleteController);
 router.put('/:idController', requireAdmin, controllerController.updateController);
 router.get('/:idController', controllerController.getControllerById);

@@ -83,6 +83,14 @@ async def save_controller_poll(
     values left untouched (only reachability/error/measuredAt change) — a
     controller that cannot currently be reached should not appear to have
     magically cleared all its alarms.
+
+    A reading row is written on every sweep, successful or not. Availability
+    KPIs need a continuous time series to compute an honest uptime ratio —
+    without a row for failed sweeps, "no data" would be indistinguishable from
+    "was down", and a long outage would silently vanish from the average
+    instead of dragging it down. On failure the alarm fields are stored as
+    null/empty rather than copying the stale values still sitting in
+    `snapshot`, so a downtime row can never be mistaken for a fresh reading.
     """
     now = datetime.now(timezone.utc)
 
@@ -92,18 +100,17 @@ async def save_controller_poll(
 
     await _db.controllers.update_one({"_id": controller_id}, {"$set": update})
 
-    if reachable:
-        await _db[READINGS].insert_one(
-            {
-                "ts": now,
-                "meta": {"controller": controller_id, "project": project_id},
-                "reachable": True,
-                "unitAlarmStatus1": snapshot.get("unitAlarmStatus1"),
-                "unitAlarmStatus2": snapshot.get("unitAlarmStatus2"),
-                "shortAlarmStatus": snapshot.get("shortAlarmStatus"),
-                "activeFlags": snapshot.get("activeFlags", []),
-            }
-        )
+    await _db[READINGS].insert_one(
+        {
+            "ts": now,
+            "meta": {"controller": controller_id, "project": project_id},
+            "reachable": reachable,
+            "unitAlarmStatus1": snapshot.get("unitAlarmStatus1") if reachable else None,
+            "unitAlarmStatus2": snapshot.get("unitAlarmStatus2") if reachable else None,
+            "shortAlarmStatus": snapshot.get("shortAlarmStatus") if reachable else None,
+            "activeFlags": snapshot.get("activeFlags", []) if reachable else [],
+        }
+    )
 
     events = [
         {

@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const Project = require('./project');
 const Member = require('../member/member');
+const Controller = require('../controller/controller');
+const Reading = require('../controller/reading');
+const AlarmEvent = require('../controller/alarmEvent');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { accessibleProjectIds } = require('../middlewares/auth');
 
@@ -47,12 +50,17 @@ module.exports = {
       {
         $addFields: {
           controllerCount: { $size: '$controllers' },
+          // A controller under maintenance is excluded from both counts — it
+          // still exists (controllerCount), it's just not "a problem" for
+          // as long as maintenance is active.
           offlineCount: {
             $size: {
               $filter: {
                 input: '$controllers',
                 as: 'c',
-                cond: { $eq: ['$$c.status', false] },
+                cond: {
+                  $and: [{ $eq: ['$$c.status', false] }, { $ne: ['$$c.maintenanceMode', true] }],
+                },
               },
             },
           },
@@ -61,7 +69,21 @@ module.exports = {
               $filter: {
                 input: '$controllers',
                 as: 'c',
-                cond: { $gt: [{ $size: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] } }, 0] },
+                cond: {
+                  $and: [
+                    { $gt: [{ $size: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] } }, 0] },
+                    { $ne: ['$$c.maintenanceMode', true] },
+                  ],
+                },
+              },
+            },
+          },
+          maintenanceCount: {
+            $size: {
+              $filter: {
+                input: '$controllers',
+                as: 'c',
+                cond: { $eq: ['$$c.maintenanceMode', true] },
               },
             },
           },
@@ -94,5 +116,69 @@ module.exports = {
     const result = await Project.deleteOne({ _id: req.params.idProject });
     if (!result.deletedCount) return res.status(404).json({ error: 'Projet introuvable' });
     return res.status(200).json({ message: 'Le projet a été supprimé avec succès' });
+  }),
+
+  /**
+   * Availability (%) and alarm frequency per controller over a trailing
+   * window, for the project's KPI tab. Uptime comes from the Reading
+   * time-series (one row per sweep, reachable or not — see store.py), never
+   * from the capped/undersampled history endpoint. `total===0` (no rows in
+   * the window — a brand-new controller, or data past the TTL) yields
+   * `uptimePercent: null` rather than a misleading 0 or 100.
+   */
+  getProjectKpi: asyncHandler(async (req, res) => {
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const projectId = new mongoose.Types.ObjectId(req.projectId);
+
+    const controllers = await Controller.find({ project: req.projectId })
+      .select('_id nom maintenanceMode')
+      .sort({ nom: 1 })
+      .lean();
+
+    const [uptimeRows, alarmRows] = await Promise.all([
+      Reading.aggregate([
+        { $match: { 'meta.project': projectId, ts: { $gte: since } } },
+        {
+          $group: {
+            _id: '$meta.controller',
+            total: { $sum: 1 },
+            up: { $sum: { $cond: ['$reachable', 1, 0] } },
+          },
+        },
+      ]),
+      AlarmEvent.aggregate([
+        { $match: { project: projectId, state: 'active', occurredAt: { $gte: since } } },
+        { $group: { _id: '$controller', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const uptimeById = new Map(uptimeRows.map((r) => [String(r._id), r]));
+    const alarmCountById = new Map(alarmRows.map((r) => [String(r._id), r.count]));
+
+    const rows = controllers.map((c) => {
+      const u = uptimeById.get(String(c._id));
+      const uptimePercent = u && u.total > 0 ? Math.round((u.up / u.total) * 1000) / 10 : null;
+      return {
+        controllerId: c._id,
+        nom: c.nom,
+        maintenanceMode: !!c.maintenanceMode,
+        uptimePercent,
+        alarmCount: alarmCountById.get(String(c._id)) || 0,
+      };
+    });
+
+    const withUptime = rows.filter((r) => r.uptimePercent !== null);
+    const avgUptimePercent = withUptime.length
+      ? Math.round((withUptime.reduce((sum, r) => sum + r.uptimePercent, 0) / withUptime.length) * 10) / 10
+      : null;
+    const totalAlarmCount = rows.reduce((sum, r) => sum + r.alarmCount, 0);
+
+    return res.status(200).json({
+      days,
+      generatedAt: new Date(),
+      summary: { avgUptimePercent, totalAlarmCount, controllerCount: rows.length },
+      controllers: rows,
+    });
   }),
 };

@@ -94,7 +94,7 @@ const POPUP_ICON = {
                     </span>
                     <span
                       class="h-2 w-2 flex-none rounded-full"
-                      [style.background-color]="!c.status ? 'var(--neutral)' : c.lastSnapshot.activeFlags.length ? 'var(--crit)' : 'var(--good)'"
+                      [style.background-color]="c.maintenanceMode ? 'var(--warn)' : !c.status ? 'var(--neutral)' : c.lastSnapshot.activeFlags.length ? 'var(--crit)' : 'var(--good)'"
                     ></span>
                   </button>
                 </li>
@@ -262,10 +262,16 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
   }
 
   private paintPin(element: HTMLElement, controllers: Controller[]): void {
-    const alarmed = controllers.filter((c) => c.status && c.lastSnapshot.activeFlags.length > 0).length;
-    const offline = controllers.filter((c) => !c.status).length;
+    // Maintenance-mode controllers are excluded from the alarmed/offline
+    // counts — same "full suppression" rule as the project aggregation and
+    // alertJob — so a group pin only turns amber, never red, for them.
+    const active = controllers.filter((c) => !c.maintenanceMode);
+    const alarmed = active.filter((c) => c.status && c.lastSnapshot.activeFlags.length > 0).length;
+    const offline = active.filter((c) => !c.status).length;
+    const inMaintenance = controllers.some((c) => c.maintenanceMode);
     element.classList.toggle('is-crit', alarmed > 0);
     element.classList.toggle('is-down', alarmed === 0 && offline > 0);
+    element.classList.toggle('is-maintenance', alarmed === 0 && offline === 0 && inMaintenance);
     element.classList.toggle('is-group', controllers.length > 1);
     element.textContent = controllers.length > 1 ? String(controllers.length) : '';
     element.title =
@@ -293,8 +299,14 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
     const t = (key: any, params?: Record<string, string | number>) => this.escape(this.i18n.t(key, params));
     const row = (c: Controller) => {
       const alarmed = c.status && c.lastSnapshot.activeFlags.length > 0;
-      const state = !c.status ? 'is-down' : alarmed ? 'is-crit' : 'is-up';
-      const label = !c.status ? t('status.unreachable') : alarmed ? t('projectMap.alarmCount', { count: c.lastSnapshot.activeFlags.length }) : t('status.ok');
+      const state = c.maintenanceMode ? 'is-maintenance' : !c.status ? 'is-down' : alarmed ? 'is-crit' : 'is-up';
+      const label = c.maintenanceMode
+        ? t('status.maintenance')
+        : !c.status
+          ? t('status.unreachable')
+          : alarmed
+            ? t('projectMap.alarmCount', { count: c.lastSnapshot.activeFlags.length })
+            : t('status.ok');
       const id = this.escape(c._id);
       const links = [
         hasCoordinates(c)

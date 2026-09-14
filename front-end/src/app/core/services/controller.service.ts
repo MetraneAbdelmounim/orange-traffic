@@ -47,4 +47,14 @@ export class ControllerService {
       {}
     );
   }
+
+  /** Admin only — fully suppresses this controller from alert emails and switches its badge to neutral. */
+  setMaintenance(id: string, enabled: boolean, note?: string): Observable<Controller> {
+    return this.http.put<Controller>(`/api/controllers/maintenance/${id}`, { enabled, note });
+  }
+
+  /** Any member with access to the controller's project — workflow/visibility only, does not affect alert emails. */
+  setAcknowledgment(id: string, acknowledged: boolean, note?: string): Observable<Controller> {
+    return this.http.put<Controller>(`/api/controllers/acknowledge/${id}`, { acknowledged, note });
+  }
 }

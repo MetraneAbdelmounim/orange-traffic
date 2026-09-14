@@ -21,7 +21,7 @@ import { ControllerSnapshot } from '../models/controller';
     <span class="signal-badge" [title]="tooltip()">
       <span class="signal-lamps">
         <span class="signal-lamp is-red" [class.lit]="state() === 'crit'"></span>
-        <span class="signal-lamp is-yellow"></span>
+        <span class="signal-lamp is-yellow" [class.lit]="state() === 'maintenance'"></span>
         <span class="signal-lamp is-green" [class.lit]="state() === 'good'"></span>
       </span>
       <span class="signal-label" [class]="'is-' + state()">
@@ -34,6 +34,7 @@ export class SignalBadgeComponent {
   private i18n = inject(I18nService);
   private readonly snapshotSig = signal<ControllerSnapshot | null>(null);
   private readonly reachableSig = signal<boolean>(false);
+  private readonly maintenanceSig = signal<boolean>(false);
 
   @Input() set snapshot(value: ControllerSnapshot | null | undefined) {
     this.snapshotSig.set(value ?? null);
@@ -41,8 +42,13 @@ export class SignalBadgeComponent {
   @Input() set reachable(value: boolean | undefined) {
     this.reachableSig.set(!!value);
   }
+  /** While true, overrides crit/good/neutral with a distinct maintenance state — regardless of the real alarm data underneath. */
+  @Input() set maintenance(value: boolean | undefined) {
+    this.maintenanceSig.set(!!value);
+  }
 
-  readonly state = computed<'good' | 'crit' | 'neutral'>(() => {
+  readonly state = computed<'good' | 'crit' | 'neutral' | 'maintenance'>(() => {
+    if (this.maintenanceSig()) return 'maintenance';
     if (!this.reachableSig()) return 'neutral';
     const flags = this.snapshotSig()?.activeFlags ?? [];
     return flags.length > 0 ? 'crit' : 'good';
@@ -50,6 +56,7 @@ export class SignalBadgeComponent {
 
   readonly label = computed(() => {
     const lang = this.i18n.lang();
+    if (this.maintenanceSig()) return this.i18n.t('status.maintenance');
     if (!this.reachableSig()) return this.i18n.t('status.unreachable');
     const flags = this.snapshotSig()?.activeFlags ?? [];
     if (flags.length === 0) return this.i18n.t('status.ok');
@@ -60,6 +67,7 @@ export class SignalBadgeComponent {
   readonly tooltip = computed(() => {
     const lang = this.i18n.lang();
     const flags = this.snapshotSig()?.activeFlags ?? [];
+    if (this.maintenanceSig()) return this.i18n.t('status.maintenanceTooltip');
     if (!this.reachableSig()) return this.snapshotSig()?.error ?? this.i18n.t('status.noSnmpResponse');
     if (flags.length === 0) return this.i18n.t('status.noActiveAlarm');
     return flags.map((f) => translateAlarmLabel(f, lang)).join('\n');

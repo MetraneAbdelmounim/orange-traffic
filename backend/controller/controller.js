@@ -57,6 +57,26 @@ const controllerSchema = mongoose.Schema(
     // Reachability summary, refreshed by the poller on every sweep.
     status: { type: Boolean, default: false },
     lastSeenAt: { type: Date, default: null },
+
+    // While true, alertJob.js skips this controller entirely (no email) and
+    // the UI shows a neutral "maintenance" state instead of crit/warn colors.
+    maintenanceMode: { type: Boolean, default: false },
+    maintenance: {
+      note: { type: String, default: null },
+      by: { type: String, default: null }, // username, denormalised like alertJob's recipients
+      at: { type: Date, default: null },
+    },
+
+    // Purely a visibility/workflow aid (does not affect alert emails). Valid
+    // only while `flagsSnapshot` still matches the controller's current alarm
+    // condition — see backend/controller/flagsKey.js. A new alarm condition
+    // silently invalidates it without anything needing to clear it.
+    acknowledgment: {
+      flagsSnapshot: { type: String, default: null },
+      note: { type: String, default: null },
+      by: { type: String, default: null },
+      at: { type: Date, default: null },
+    },
   },
   { timestamps: true }
 );
