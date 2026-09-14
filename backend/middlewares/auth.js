@@ -49,6 +49,22 @@ function requireAdmin(req, res, next) {
 }
 
 /**
+ * Blocks everything except the escape hatch (changing your own password)
+ * while a temporary password is still in effect. This is the real
+ * enforcement point — a frontend redirect alone would only be a UX nicety
+ * that a direct API call or URL edit could bypass.
+ */
+function requirePasswordChanged(req, res, next) {
+  if (req.member?.mustChangePassword) {
+    return res.status(403).json({
+      error: 'Vous devez changer votre mot de passe avant de continuer',
+      code: 'PASSWORD_CHANGE_REQUIRED',
+    });
+  }
+  return next();
+}
+
+/**
  * Requires the target member in `req.params[param]` to be the caller.
  * Admins are allowed through so they can administer other accounts.
  */
@@ -104,6 +120,7 @@ module.exports = {
   requireAdmin,
   requireSelfOrAdmin,
   requireProjectAccess,
+  requirePasswordChanged,
   accessibleProjectIds,
   UNAUTHORIZED,
 };

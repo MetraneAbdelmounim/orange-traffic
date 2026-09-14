@@ -50,3 +50,17 @@ export const setupDoneGuard: CanActivateFn = async () => {
     return true;
   }
 };
+
+/**
+ * Applied to every protected route — redirects to `/change-password` while a
+ * temporary password is still in effect. A UX shortcut only: the backend's
+ * `requirePasswordChanged` middleware enforces the same restriction on every
+ * API call independently, so bypassing this guard (a stale local flag, a
+ * direct URL) still 403s on the first real request.
+ */
+export const passwordChangeGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  if (!auth.mustChangePassword()) return true;
+  return router.createUrlTree(['/change-password']);
+};

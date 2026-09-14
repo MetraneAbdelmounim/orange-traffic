@@ -3,12 +3,16 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { translateApiError } from '../../i18n/backend-errors';
+import { I18nService } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { BrandLogoComponent } from '../../ui/brand-logo.component';
+import { LanguageToggleComponent } from '../../ui/language-toggle.component';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, BrandLogoComponent],
+  imports: [CommonModule, FormsModule, BrandLogoComponent, LanguageToggleComponent, TranslatePipe],
   template: `
     <div class="relative flex min-h-screen bg-app">
       <!-- Imagery panel. Decorative — hidden from assistive tech, collapses
@@ -29,20 +33,19 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
           <div class="max-w-lg">
             <span class="chip chip-good mb-6">
               <span class="chip-dot live-dot"></span>
-              Supervision en temps réel
+              {{ 'login.liveBadge' | t }}
             </span>
             <h1 class="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-              Chaque intersection,<br />sous surveillance.
+              {{ 'login.heroTitleLine1' | t }}<br />{{ 'login.heroTitleLine2' | t }}
             </h1>
             <p class="mt-5 text-lg font-light text-white/75">
-              Alarmes NTCIP décodées, historique et disponibilité de votre parc
-              de contrôleurs ATC-1500, réunis sur une seule plateforme.
+              {{ 'login.heroBody' | t }}
             </p>
           </div>
 
           <div class="flex items-center gap-8 text-sm text-white/55">
             <div><span class="block text-2xl font-bold text-white">SNMP</span>NTCIP 1202</div>
-            <div><span class="block text-2xl font-bold text-white">24/7</span>Surveillance continue</div>
+            <div><span class="block text-2xl font-bold text-white">24/7</span>{{ 'login.continuousMonitoring' | t }}</div>
             <div><span class="block text-2xl font-bold text-white">ATC-1500</span>Oriux</div>
           </div>
         </div>
@@ -51,21 +54,24 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
       <!-- Form panel -->
       <div class="flex w-full items-center justify-center p-6 sm:p-10 lg:w-[28rem] lg:flex-none">
         <div class="w-full max-w-sm">
-          <div class="mb-10 flex justify-center lg:hidden">
+          <div class="mb-6 flex items-center justify-between lg:hidden">
             <app-brand-logo size="lg" variant="partnership" />
           </div>
+          <div class="mb-4 flex justify-end">
+            <app-language-toggle />
+          </div>
 
-          <h2 class="text-2xl font-bold tracking-tight text-ink">Supervision ATC-1500</h2>
-          <p class="mt-1.5 text-sm text-ink-secondary">Connectez-vous pour accéder à vos contrôleurs.</p>
+          <h2 class="text-2xl font-bold tracking-tight text-ink">{{ 'login.title' | t }}</h2>
+          <p class="mt-1.5 text-sm text-ink-secondary">{{ 'login.subtitle' | t }}</p>
 
           <form class="mt-8 flex flex-col gap-5" (ngSubmit)="submit()">
             <div>
-              <label class="label" for="username">Nom d'utilisateur</label>
+              <label class="label" for="username">{{ 'login.username' | t }}</label>
               <input id="username" name="username" class="field" [(ngModel)]="username" autocomplete="username" required />
             </div>
 
             <div>
-              <label class="label" for="password">Mot de passe</label>
+              <label class="label" for="password">{{ 'login.password' | t }}</label>
               <div class="relative">
                 <input
                   id="password"
@@ -80,7 +86,7 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
                   type="button"
                   (click)="showPassword.set(!showPassword())"
                   class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-ink-muted transition hover:text-ink"
-                  [attr.aria-label]="showPassword() ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                  [attr.aria-label]="(showPassword() ? 'login.hidePassword' : 'login.showPassword') | t"
                 >
                   @if (!showPassword()) {
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
@@ -101,14 +107,14 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
             }
 
             <button type="submit" class="btn btn-primary w-full py-3" [disabled]="loading()">
-              {{ loading() ? 'Connexion…' : 'Se connecter' }}
+              {{ loading() ? ('common.loading' | t) : ('login.submit' | t) }}
             </button>
           </form>
 
           <p class="mt-10 text-center text-xs text-ink-muted">
             Orange Traffic · Supervision NTCIP/SNMP
             <br />
-            Conçu par <span class="font-semibold text-ink-secondary">Younès Berayeteb</span>
+            {{ 'common.designedBy' | t }} <span class="font-semibold text-ink-secondary">Younès Berayeteb</span>
           </p>
         </div>
       </div>
@@ -118,6 +124,7 @@ import { BrandLogoComponent } from '../../ui/brand-logo.component';
 export class LoginComponent implements OnInit, OnDestroy {
   private auth = inject(AuthService);
   private router = inject(Router);
+  private i18n = inject(I18nService);
 
   readonly images = ['assets/login/bg-highway.webp', 'assets/login/bg-office.webp'];
   currentImage = signal(0);
@@ -147,7 +154,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       await this.auth.login(this.username, this.password);
       this.router.navigateByUrl('/projects');
     } catch (err: any) {
-      this.error.set(err?.error?.error || 'Connexion impossible');
+      this.error.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('login.failed'));
     } finally {
       this.loading.set(false);
     }

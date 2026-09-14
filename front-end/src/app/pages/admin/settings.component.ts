@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { LicenceService } from '../../core/services/licence.service';
 import { SettingsService } from '../../core/services/settings.service';
+import { translateApiError } from '../../i18n/backend-errors';
+import { I18nService } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { LicenceStatus } from '../../models/licence';
 import { SettingsUpdate } from '../../models/settings';
 import { PageHeaderComponent } from '../../ui/page-header.component';
@@ -13,10 +16,10 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, PageHeaderComponent],
+  imports: [CommonModule, FormsModule, RouterLink, PageHeaderComponent, TranslatePipe],
   template: `
     <div class="max-w-5xl mx-auto px-4 py-8">
-      <app-page-header title="Réglages" subtitle="Configuration de l'application" [icon]="settingsIcon" />
+      <app-page-header [title]="'nav.settings' | t" [subtitle]="'settings.subtitle' | t" [icon]="settingsIcon" />
 
       @if (loading()) {
         <div class="grid gap-6 lg:grid-cols-2">
@@ -29,20 +32,20 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
           <!-- General -->
           <section class="card p-6">
             <header class="mb-4">
-              <h2 class="text-sm font-semibold text-ink">Général</h2>
-              <p class="text-xs text-ink-muted">Paramètres de supervision par défaut</p>
+              <h2 class="text-sm font-semibold text-ink">{{ 'settings.general' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.generalHint' | t }}</p>
             </header>
             <div class="flex flex-col gap-4">
               <div>
-                <label class="label" for="pollIntervalSeconds">Intervalle de sondage (s)</label>
+                <label class="label" for="pollIntervalSeconds">{{ 'settings.pollInterval' | t }}</label>
                 <input id="pollIntervalSeconds" type="number" class="field" [(ngModel)]="form.pollIntervalSeconds" name="pollIntervalSeconds" />
               </div>
               <div>
-                <label class="label" for="defaultSnmpCommunity">Communauté SNMP par défaut</label>
+                <label class="label" for="defaultSnmpCommunity">{{ 'settings.defaultSnmpCommunity' | t }}</label>
                 <input id="defaultSnmpCommunity" class="field" [(ngModel)]="form.defaultSnmpCommunity" name="defaultSnmpCommunity" />
               </div>
               <div class="flex justify-end">
-                <button type="button" class="btn btn-primary" (click)="saveGeneral()" [disabled]="saving()">Enregistrer</button>
+                <button type="button" class="btn btn-primary" (click)="saveGeneral()" [disabled]="saving()">{{ 'common.save' | t }}</button>
               </div>
             </div>
           </section>
@@ -50,48 +53,48 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
           <!-- SMTP -->
           <section class="card p-6">
             <header class="mb-4">
-              <h2 class="text-sm font-semibold text-ink">SMTP / E-mail</h2>
-              <p class="text-xs text-ink-muted">Utilisé pour les alertes critiques</p>
+              <h2 class="text-sm font-semibold text-ink">{{ 'settings.smtpTitle' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.smtpHint' | t }}</p>
             </header>
             <div class="flex flex-col gap-4">
               <div class="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label class="label" for="smtpHost">Hôte</label>
+                  <label class="label" for="smtpHost">{{ 'settings.smtpHost' | t }}</label>
                   <input id="smtpHost" class="field" [(ngModel)]="form.smtpHost" name="smtpHost" />
                 </div>
                 <div>
-                  <label class="label" for="smtpPort">Port</label>
+                  <label class="label" for="smtpPort">{{ 'settings.smtpPort' | t }}</label>
                   <input id="smtpPort" type="number" class="field" [(ngModel)]="form.smtpPort" name="smtpPort" />
                 </div>
                 <div>
-                  <label class="label" for="smtpUser">Utilisateur</label>
+                  <label class="label" for="smtpUser">{{ 'settings.smtpUser' | t }}</label>
                   <input id="smtpUser" class="field" [(ngModel)]="form.smtpUser" name="smtpUser" />
                 </div>
                 <div>
-                  <label class="label" for="smtpPass">Mot de passe</label>
+                  <label class="label" for="smtpPass">{{ 'login.password' | t }}</label>
                   <input id="smtpPass" type="password" class="field" [(ngModel)]="form.smtpPass" name="smtpPass" [placeholder]="passwordPlaceholder()" autocomplete="new-password" />
                 </div>
                 <div>
-                  <label class="label" for="smtpFromName">Nom expéditeur</label>
+                  <label class="label" for="smtpFromName">{{ 'settings.smtpFromName' | t }}</label>
                   <input id="smtpFromName" class="field" [(ngModel)]="form.smtpFromName" name="smtpFromName" />
                 </div>
                 <div>
-                  <label class="label" for="smtpFromEmail">E-mail expéditeur</label>
+                  <label class="label" for="smtpFromEmail">{{ 'settings.smtpFromEmail' | t }}</label>
                   <input id="smtpFromEmail" type="email" class="field" [(ngModel)]="form.smtpFromEmail" name="smtpFromEmail" />
                 </div>
               </div>
               <label class="flex items-center gap-3">
                 <input type="checkbox" class="h-4 w-4 rounded border-line" [(ngModel)]="form.smtpSecure" name="smtpSecure" />
-                <span class="text-sm text-ink">Connexion sécurisée (TLS/SSL)</span>
+                <span class="text-sm text-ink">{{ 'settings.smtpSecure' | t }}</span>
               </label>
 
               <div class="flex items-end gap-3">
                 <div class="flex-1">
-                  <label class="label" for="testTo">Adresse de test</label>
-                  <input id="testTo" type="email" class="field" [(ngModel)]="testTo" name="testTo" placeholder="vous@exemple.com" />
+                  <label class="label" for="testTo">{{ 'settings.testAddress' | t }}</label>
+                  <input id="testTo" type="email" class="field" [(ngModel)]="testTo" name="testTo" [placeholder]="'common.yourEmailPlaceholder' | t" />
                 </div>
                 <button type="button" class="btn btn-ghost" (click)="testSmtp()" [disabled]="testing()">
-                  {{ testing() ? 'Test…' : 'Tester SMTP' }}
+                  {{ (testing() ? 'setup.testing' : 'settings.testSmtp') | t }}
                 </button>
               </div>
               @if (testResult(); as t) {
@@ -99,7 +102,7 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
               }
 
               <div class="flex justify-end">
-                <button type="button" class="btn btn-primary" (click)="saveSmtp()" [disabled]="saving()">Enregistrer</button>
+                <button type="button" class="btn btn-primary" (click)="saveSmtp()" [disabled]="saving()">{{ 'common.save' | t }}</button>
               </div>
             </div>
           </section>
@@ -107,45 +110,43 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
           <!-- Notifications -->
           <section class="card p-6">
             <header class="mb-4">
-              <h2 class="text-sm font-semibold text-ink">Notifications</h2>
-              <p class="text-xs text-ink-muted">Qui reçoit les alertes critiques</p>
+              <h2 class="text-sm font-semibold text-ink">{{ 'nav.notifications' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.notificationsHint' | t }}</p>
             </header>
-            <p class="text-sm text-ink-secondary">
-              Chaque membre choisit individuellement de recevoir ou non les alertes critiques par e-mail.
-            </p>
-            <a routerLink="/admin/members" class="btn btn-ghost mt-4 inline-flex">Gérer les préférences des membres</a>
+            <p class="text-sm text-ink-secondary">{{ 'settings.notificationsBody' | t }}</p>
+            <a routerLink="/admin/members" class="btn btn-ghost mt-4 inline-flex">{{ 'settings.manageMemberPrefs' | t }}</a>
           </section>
 
           <!-- License -->
           <section class="card p-6">
             <header class="mb-4">
-              <h2 class="text-sm font-semibold text-ink">Licence</h2>
-              <p class="text-xs text-ink-muted">État de la licence Orange Traffic</p>
+              <h2 class="text-sm font-semibold text-ink">{{ 'nav.license' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.licenseHint' | t }}</p>
             </header>
             @if (licence(); as l) {
               @if (l.installed) {
                 <div class="flex items-center justify-between">
-                  <span class="text-sm text-ink">{{ l.type === 'demo' ? 'Licence démo' : l.customer }}</span>
+                  <span class="text-sm text-ink">{{ l.type === 'demo' ? ('license.demo' | t) : l.customer }}</span>
                   @if (l.valid) {
-                    <span class="chip chip-good"><span class="chip-dot"></span>{{ l.daysRemaining }} j. restants</span>
+                    <span class="chip chip-good"><span class="chip-dot"></span>{{ l.daysRemaining }} {{ 'settings.daysRemainingShort' | t }}</span>
                   } @else {
-                    <span class="chip chip-crit"><span class="chip-dot"></span>Expirée</span>
+                    <span class="chip chip-crit"><span class="chip-dot"></span>{{ 'license.expired' | t }}</span>
                   }
                 </div>
               } @else {
-                <p class="chip chip-crit self-start"><span class="chip-dot"></span>Aucune licence</p>
+                <p class="chip chip-crit self-start"><span class="chip-dot"></span>{{ 'license.none' | t }}</p>
               }
             }
-            <a routerLink="/admin/license" class="btn btn-ghost mt-4 inline-flex">Gérer la licence</a>
+            <a routerLink="/admin/license" class="btn btn-ghost mt-4 inline-flex">{{ 'settings.manageLicense' | t }}</a>
           </section>
 
           <!-- Administration -->
           <section class="card p-6">
             <header class="mb-4">
-              <h2 class="text-sm font-semibold text-ink">Administration</h2>
-              <p class="text-xs text-ink-muted">Comptes et accès</p>
+              <h2 class="text-sm font-semibold text-ink">{{ 'settings.administration' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.administrationHint' | t }}</p>
             </header>
-            <a routerLink="/admin/members" class="btn btn-ghost inline-flex">Gérer les membres</a>
+            <a routerLink="/admin/members" class="btn btn-ghost inline-flex">{{ 'settings.manageMembers' | t }}</a>
           </section>
         </div>
       }
@@ -155,6 +156,7 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
 export class SettingsComponent implements OnInit {
   private settingsService = inject(SettingsService);
   private licenceService = inject(LicenceService);
+  private i18n = inject(I18nService);
 
   settingsIcon = SETTINGS_ICON;
   loading = signal(true);
@@ -188,7 +190,7 @@ export class SettingsComponent implements OnInit {
   }
 
   passwordPlaceholder(): string {
-    return this.form.smtpPassSet ? '•••• (laisser vide pour conserver)' : 'Non configuré';
+    return this.form.smtpPassSet ? this.i18n.t('settings.smtpPassSetPlaceholder') : this.i18n.t('settings.smtpPassUnsetPlaceholder');
   }
 
   async saveGeneral(): Promise<void> {
@@ -237,7 +239,8 @@ export class SettingsComponent implements OnInit {
       });
       this.testResult.set(res);
     } catch (err: any) {
-      this.testResult.set({ ok: false, message: err?.error?.message || err?.error?.error || 'Échec du test' });
+      const message = translateApiError(err?.error?.message || err?.error?.error, this.i18n.lang()) || this.i18n.t('setup.testFailed');
+      this.testResult.set({ ok: false, message });
     } finally {
       this.testing.set(false);
     }

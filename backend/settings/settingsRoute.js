@@ -1,12 +1,12 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const settingsController = require('./settingsController');
-const { authenticate, requireAdmin } = require('../middlewares/auth');
+const { authenticate, requireAdmin, requirePasswordChanged } = require('../middlewares/auth');
 const licenceGuard = require('../middlewares/licenceGuard');
 
 const router = express.Router();
 
-router.use(licenceGuard, authenticate, requireAdmin);
+router.use(licenceGuard, authenticate, requireAdmin, requirePasswordChanged);
 
 // Each call opens a real outbound SMTP connection — worth throttling
 // separately from the general /api rate limiter.

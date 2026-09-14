@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ThemeService } from '../core/services/theme.service';
+import { I18nService } from '../i18n/i18n.service';
 
 /** Cycles light → dark → system. Icon-only, so it reads as a control, not a label. */
 @Component({
@@ -12,8 +13,8 @@ import { ThemeService } from '../core/services/theme.service';
       type="button"
       (click)="theme.cycle()"
       class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-ink-secondary transition hover:bg-hover hover:text-ink"
-      [title]="'Thème : ' + label()"
-      [attr.aria-label]="'Changer de thème (actuel : ' + label() + ')'"
+      [title]="i18n.t('theme.tooltip', { label: label() })"
+      [attr.aria-label]="i18n.t('theme.ariaLabel', { label: label() })"
     >
       @switch (theme.choice()) {
         @case ('light') {
@@ -39,8 +40,9 @@ import { ThemeService } from '../core/services/theme.service';
 })
 export class ThemeToggleComponent {
   theme = inject(ThemeService);
+  i18n = inject(I18nService);
 
   label(): string {
-    return { light: 'Clair', dark: 'Sombre', system: 'Système' }[this.theme.choice()];
+    return this.i18n.t({ light: 'theme.light', dark: 'theme.dark', system: 'theme.system' }[this.theme.choice()] as any);
   }
 }

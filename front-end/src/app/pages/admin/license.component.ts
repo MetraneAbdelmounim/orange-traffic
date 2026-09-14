@@ -2,6 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { AuthService } from '../../core/services/auth.service';
 import { LicenceService } from '../../core/services/licence.service';
+import { translateApiError } from '../../i18n/backend-errors';
+import { I18nService } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { LicenceStatus } from '../../models/licence';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 
@@ -16,10 +19,10 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
 @Component({
   selector: 'app-license',
   standalone: true,
-  imports: [CommonModule, PageHeaderComponent],
+  imports: [CommonModule, PageHeaderComponent, TranslatePipe],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-8">
-      <app-page-header title="Licence" subtitle="Gestion de la licence Orange Traffic" [icon]="licenseIcon" />
+      <app-page-header [title]="'nav.license' | t" [subtitle]="'license.subtitle' | t" [icon]="licenseIcon" />
 
       @if (loading()) {
         <div class="card h-40 skeleton"></div>
@@ -29,33 +32,33 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
             @if (s.installed) {
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="text-lg font-semibold text-ink">{{ s.type === 'demo' ? 'Licence démo' : s.customer }}</p>
+                  <p class="text-lg font-semibold text-ink">{{ s.type === 'demo' ? ('license.demo' | t) : s.customer }}</p>
                   <p class="text-sm text-ink-muted">{{ s.licenceId }}</p>
                 </div>
                 @if (s.valid) {
-                  <span class="chip chip-good"><span class="chip-dot"></span>Active</span>
+                  <span class="chip chip-good"><span class="chip-dot"></span>{{ 'license.active' | t }}</span>
                 } @else {
-                  <span class="chip chip-crit"><span class="chip-dot"></span>Expirée</span>
+                  <span class="chip chip-crit"><span class="chip-dot"></span>{{ 'license.expired' | t }}</span>
                 }
               </div>
               <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p class="text-xs text-ink-muted">Expire le</p>
+                  <p class="text-xs text-ink-muted">{{ 'license.expiresOn' | t }}</p>
                   <p class="font-medium text-ink">{{ s.expiresAt | date: 'dd/MM/yyyy' }}</p>
                 </div>
                 <div>
-                  <p class="text-xs text-ink-muted">Jours restants</p>
+                  <p class="text-xs text-ink-muted">{{ 'license.daysRemaining' | t }}</p>
                   <p class="font-medium text-ink">{{ s.valid ? s.daysRemaining : 0 }}</p>
                 </div>
                 @if (s.maxControllers) {
                   <div>
-                    <p class="text-xs text-ink-muted">Contrôleurs max.</p>
+                    <p class="text-xs text-ink-muted">{{ 'license.maxControllers' | t }}</p>
                     <p class="font-medium text-ink">{{ s.maxControllers }}</p>
                   </div>
                 }
               </div>
             } @else {
-              <p class="chip chip-crit self-start"><span class="chip-dot"></span>Aucune licence installée</p>
+              <p class="chip chip-crit self-start"><span class="chip-dot"></span>{{ 'license.none' | t }}</p>
             }
           }
         </div>
@@ -64,12 +67,12 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
           <div class="card p-6 mt-6">
             @if (!status()?.valid) {
               <button type="button" class="btn btn-primary" (click)="activateDemo()" [disabled]="busy()">
-                {{ busy() ? 'Activation…' : 'Activer une licence démo (10 jours)' }}
+                {{ (busy() ? 'setup.activating' : 'license.activateDemo') | t }}
               </button>
             }
 
             <div class="mt-6">
-              <p class="label mb-2">Téléverser une licence (.otlic)</p>
+              <p class="label mb-2">{{ 'license.uploadLabel' | t }}</p>
               <div
                 class="drop-zone"
                 [class.drop-zone-active]="dragging()"
@@ -77,9 +80,9 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
                 (dragleave)="dragging.set(false)"
                 (drop)="onDrop($event)"
               >
-                <p class="text-sm text-ink-secondary">Glissez-déposez un fichier .otlic ici, ou</p>
+                <p class="text-sm text-ink-secondary">{{ 'license.dropHint' | t }}</p>
                 <label class="btn btn-ghost mt-2 cursor-pointer">
-                  Choisir un fichier
+                  {{ 'license.chooseFile' | t }}
                   <input type="file" accept=".otlic,application/json" class="hidden" (change)="onFileSelected($event)" />
                 </label>
                 @if (selectedFile()) {
@@ -88,7 +91,7 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
               </div>
               <div class="mt-3 flex justify-end">
                 <button type="button" class="btn btn-primary" [disabled]="!selectedFile() || busy()" (click)="upload()">
-                  {{ busy() ? 'Envoi…' : 'Téléverser la licence' }}
+                  {{ (busy() ? 'license.uploading' : 'license.uploadButton') | t }}
                 </button>
               </div>
             </div>
@@ -101,7 +104,7 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
           </div>
         } @else {
           <div class="card p-6 mt-6 text-center">
-            <p class="text-sm text-ink-secondary">Contactez votre administrateur pour renouveler la licence.</p>
+            <p class="text-sm text-ink-secondary">{{ 'license.contactAdmin' | t }}</p>
           </div>
         }
       }
@@ -129,6 +132,7 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
 })
 export class LicenseComponent implements OnInit {
   private licenceService = inject(LicenceService);
+  private i18n = inject(I18nService);
   auth = inject(AuthService);
 
   licenseIcon = LICENSE_ICON;
@@ -158,9 +162,10 @@ export class LicenseComponent implements OnInit {
     try {
       const res = await this.licenceService.activateDemo();
       this.status.set(res.licence);
-      this.message.set({ ok: true, text: res.message });
+      this.message.set({ ok: true, text: translateApiError(res.message, this.i18n.lang()) || res.message });
     } catch (err: any) {
-      this.message.set({ ok: false, text: err?.error?.error || "Échec de l'activation" });
+      const text = translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('license.activationFailed');
+      this.message.set({ ok: false, text });
     } finally {
       this.busy.set(false);
     }
@@ -192,9 +197,11 @@ export class LicenseComponent implements OnInit {
       const res = await this.licenceService.upload(file);
       this.status.set(res.licence);
       this.selectedFile.set(null);
-      this.message.set({ ok: true, text: `✓ ${res.message}` });
+      const text = translateApiError(res.message, this.i18n.lang()) || res.message;
+      this.message.set({ ok: true, text: `✓ ${text}` });
     } catch (err: any) {
-      this.message.set({ ok: false, text: `✕ ${err?.error?.error || 'Licence invalide'}` });
+      const text = translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('license.invalid');
+      this.message.set({ ok: false, text: `✕ ${text}` });
     } finally {
       this.busy.set(false);
     }

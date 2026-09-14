@@ -125,6 +125,12 @@
 html,
 body {
   height: 100%;
+  /* Defense in depth: no single element should ever be able to force
+     page-level horizontal scroll on a narrow screen (the header once did,
+     silently, with no visual cue beyond a scrollbar). Anything that
+     legitimately needs to scroll sideways (a wide table, the PDF-style
+     report) opts into its own `overflow-x: auto` container instead. */
+  overflow-x: hidden;
 }
 
 body {
@@ -307,6 +313,22 @@ button {
   .chip-crit { background-color: var(--crit-soft); color: var(--crit); }
   .chip-neutral { background-color: var(--neutral-soft); color: var(--neutral); }
   .chip-brand { background-color: var(--brand-soft); color: var(--brand-ink); }
+
+  /* Small square icon button used for row/card-level actions (edit, delete). */
+  .icon-btn {
+    display: flex;
+    height: 2rem;
+    width: 2rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    border: 1px solid var(--line);
+    background-color: var(--surface);
+    color: var(--ink-muted);
+    transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+  .icon-btn:hover { background-color: var(--surface-hover); color: var(--brand-ink); }
+  .icon-btn-danger:hover { border-color: var(--crit); color: var(--crit); background-color: transparent; }
 
   /* Icon + label pill for an external quick-access link (device UI, modem, Street View). */
   .link-chip {

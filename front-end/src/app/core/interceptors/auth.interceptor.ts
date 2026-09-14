@@ -22,6 +22,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       if (err.status === 402 && !router.url.startsWith('/admin/license')) {
         router.navigateByUrl('/admin/license');
       }
+      // The backend disagrees with the locally cached mustChangePassword
+      // flag (e.g. it was reset on another device, or a stale value slipped
+      // past the guard) — resync and redirect rather than looping on 403s.
+      if (err.status === 403 && err.error?.code === 'PASSWORD_CHANGE_REQUIRED' && !router.url.startsWith('/change-password')) {
+        auth.markMustChangePassword();
+        router.navigateByUrl('/change-password');
+      }
       return throwError(() => err);
     })
   );

@@ -1,11 +1,11 @@
 const express = require('express');
 const controllerController = require('./controllerController');
-const { authenticate, requireAdmin, requireProjectAccess } = require('../middlewares/auth');
+const { authenticate, requireAdmin, requireProjectAccess, requirePasswordChanged } = require('../middlewares/auth');
 const licenceGuard = require('../middlewares/licenceGuard');
 
 const router = express.Router();
 
-router.use(licenceGuard, authenticate);
+router.use(licenceGuard, authenticate, requirePasswordChanged);
 
 router.get('/ping', controllerController.getAllControllers);
 

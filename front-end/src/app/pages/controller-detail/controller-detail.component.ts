@@ -1,16 +1,71 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, QueryList, ViewChildren, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
+import { Subscription, catchError, exhaustMap, of } from 'rxjs';
 import { AlarmEventService } from '../../core/services/alarm-event.service';
+import {
+  UNIT_ALARM_STATUS_1_BITS,
+  UNIT_ALARM_STATUS_2_BITS,
+  SHORT_ALARM_STATUS_BITS,
+  decodeBits,
+  translateAlarmLabel,
+} from '../../core/alarm-bits';
+import { refreshWhileVisible } from '../../core/auto-refresh';
 import { ControllerService } from '../../core/services/controller.service';
+import { I18nService, Language } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
+import { TranslationKey } from '../../i18n/fr';
 import { AlarmEvent } from '../../models/alarm-event';
 import { Controller, ControllerHistory } from '../../models/controller';
+import { Project } from '../../models/project';
+import { ChartImage, downloadSingleControllerReport } from './controller-report-single';
+import { LiveIndicatorComponent } from '../../ui/live-indicator.component';
 import { SafeHtmlPipe } from '../../ui/safe-html.pipe';
 import { SignalBadgeComponent } from '../../ui/signal-badge.component';
 import { StatTileComponent } from '../../ui/stat-tile.component';
 
 Chart.register(...registerables);
+
+type ReadingRow = ControllerHistory['readings'][number];
+
+interface HistoryChartDef {
+  key: string;
+  /** Technical NTCIP object names (unitAlarmStatus1/2, shortAlarmStatus) are not translated — only "activeFlags" has a prose title. */
+  titleKey: TranslationKey | null;
+  extract: (r: ReadingRow) => number;
+  decode?: (value: number | null, lang: Language) => string[];
+}
+
+const HISTORY_RANGES: { key: TranslationKey; hours: number }[] = [
+  { key: 'history.24h', hours: 24 },
+  { key: 'history.1w', hours: 24 * 7 },
+  { key: 'history.2w', hours: 24 * 14 },
+  { key: 'history.3w', hours: 24 * 21 },
+  { key: 'history.4w', hours: 24 * 28 },
+];
+
+const HISTORY_CHARTS: HistoryChartDef[] = [
+  { key: 'activeFlags', titleKey: 'controllerDetail.chartActiveFlags', extract: (r) => r.activeFlags.length },
+  {
+    key: 'unitAlarmStatus1',
+    titleKey: null,
+    extract: (r) => r.unitAlarmStatus1 ?? 0,
+    decode: (v, lang) => decodeBits(v, UNIT_ALARM_STATUS_1_BITS, lang),
+  },
+  {
+    key: 'unitAlarmStatus2',
+    titleKey: null,
+    extract: (r) => r.unitAlarmStatus2 ?? 0,
+    decode: (v, lang) => decodeBits(v, UNIT_ALARM_STATUS_2_BITS, lang),
+  },
+  {
+    key: 'shortAlarmStatus',
+    titleKey: null,
+    extract: (r) => r.shortAlarmStatus ?? 0,
+    decode: (v, lang) => decodeBits(v, SHORT_ALARM_STATUS_BITS, lang),
+  },
+];
 
 const ICON = {
   controller: `<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" /></svg>`,
@@ -23,15 +78,16 @@ const ICON = {
   history: `<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
 };
 
-/** Formats SNMP sysUpTime centiseconds (TimeTicks) as "3j 4h12m". */
-function formatUptime(ticks: number | null): string {
+/** Formats SNMP sysUpTime centiseconds (TimeTicks) as "3d 4h12m" / "3j 4h12m". */
+function formatUptime(ticks: number | null, lang: Language): string {
   if (ticks === null || ticks === undefined) return '—';
   const totalSeconds = Math.floor(ticks / 100);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const dayUnit = lang === 'fr' ? 'j' : 'd';
   const parts: string[] = [];
-  if (days) parts.push(`${days}j`);
+  if (days) parts.push(`${days}${dayUnit}`);
   if (days || hours) parts.push(`${hours}h`);
   parts.push(`${minutes}m`);
   return parts.join(' ');
@@ -40,12 +96,13 @@ function formatUptime(ticks: number | null): string {
 @Component({
   selector: 'app-controller-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, SignalBadgeComponent, StatTileComponent, SafeHtmlPipe],
+  imports: [CommonModule, RouterLink, SignalBadgeComponent, StatTileComponent, SafeHtmlPipe, LiveIndicatorComponent, TranslatePipe],
   template: `
     @if (controller(); as c) {
       <div class="max-w-6xl mx-auto px-4 py-8 flex flex-col gap-6">
-        <div>
-          <a [routerLink]="['/projects', projectId(c)]" class="text-sm text-ink-muted hover:text-ink">← Projet</a>
+        <div class="flex items-center justify-between">
+          <a [routerLink]="['/projects', projectId(c)]" class="text-sm text-ink-muted hover:text-ink">← {{ 'nav.projects' | t }}</a>
+          <app-live-indicator [live]="liveConnected()" [lastUpdate]="lastUpdate()" />
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-4">
@@ -58,20 +115,24 @@ function formatUptime(ticks: number | null): string {
           </div>
           <div class="flex items-center gap-3">
             <app-signal-badge [snapshot]="c.lastSnapshot" [reachable]="c.status" />
+            <button type="button" class="btn btn-ghost" [disabled]="reportBusy()" (click)="downloadReport(c)">
+              <span [innerHTML]="icon.chart | safeHtml"></span>
+              {{ (reportBusy() ? 'common.loading' : 'controllerDetail.downloadReport') | t }}
+            </button>
             <button type="button" class="btn btn-primary" [disabled]="polling()" (click)="pollNow()">
-              {{ polling() ? 'Sondage…' : 'Rafraîchir maintenant' }}
+              {{ (polling() ? 'controllerDetail.polling' : 'controllerDetail.pollNow') | t }}
             </button>
           </div>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-3">
           <app-stat-tile
-            label="Dernière lecture"
+            [label]="'controllerDetail.lastReading' | t"
             [value]="(c.lastSnapshot.measuredAt | date: 'medium') || '—'"
             [icon]="icon.clock"
             tone="brand"
           />
-          <app-stat-tile label="Uptime SNMP" [value]="uptime()" hint="Depuis le dernier redémarrage" [icon]="icon.pulse" tone="good" />
+          <app-stat-tile [label]="'controllerDetail.snmpUptime' | t" [value]="uptime()" [hint]="'controllerDetail.sinceLastRestart' | t" [icon]="icon.pulse" tone="good" />
           <app-stat-tile
             label="sysDescr"
             [value]="c.lastSnapshot.sysDescr || '—'"
@@ -83,15 +144,15 @@ function formatUptime(ticks: number | null): string {
         <div class="card p-5">
           <div class="flex items-center gap-3 mb-4">
             <span class="icon-badge tone-crit" [innerHTML]="icon.bell | safeHtml"></span>
-            <h2 class="font-semibold text-ink">Alarmes NTCIP 1202</h2>
+            <h2 class="font-semibold text-ink">{{ 'controllerDetail.ntcipAlarms' | t }}</h2>
           </div>
           @if (!c.lastSnapshot.alarms.length) {
-            <p class="chip chip-good"><span class="chip-dot"></span>Aucune alarme active</p>
+            <p class="chip chip-good"><span class="chip-dot"></span>{{ 'controllerDetail.noActiveAlarm' | t }}</p>
           } @else {
             <ul class="flex flex-col gap-2">
               @for (alarm of c.lastSnapshot.alarms; track alarm.label) {
                 <li class="chip" [class.chip-crit]="alarm.criticality === 'critical'" [class.chip-warn]="alarm.criticality === 'warning'">
-                  <span class="chip-dot"></span>{{ alarm.label }}
+                  <span class="chip-dot"></span>{{ translatedAlarmLabel(alarm.label) }}
                   <span class="opacity-70 font-mono text-[0.65rem]">{{ alarm.sourceObject }}</span>
                 </li>
               }
@@ -108,13 +169,13 @@ function formatUptime(ticks: number | null): string {
           <div class="card p-5">
             <div class="flex items-center gap-3 mb-4">
               <span class="icon-badge" [innerHTML]="icon.layers | safeHtml"></span>
-              <h2 class="font-semibold text-ink">Statut détaillé (phases / détecteurs)</h2>
-              <span class="chip chip-neutral">non confirmé pour ce modèle</span>
+              <h2 class="font-semibold text-ink">{{ 'controllerDetail.detailedStatus' | t }}</h2>
+              <span class="chip chip-neutral">{{ 'controllerDetail.unconfirmedModel' | t }}</span>
             </div>
             <div class="grid gap-4 sm:grid-cols-2 text-sm">
               @if (c.lastSnapshot.phaseStatus) {
                 <div>
-                  <p class="text-xs text-ink-muted mb-1">Phases</p>
+                  <p class="text-xs text-ink-muted mb-1">{{ 'controllerDetail.phases' | t }}</p>
                   @for (kv of objectEntries(c.lastSnapshot.phaseStatus); track kv[0]) {
                     <p class="tnum">{{ kv[0] }} = {{ kv[1] }}</p>
                   }
@@ -122,7 +183,7 @@ function formatUptime(ticks: number | null): string {
               }
               @if (c.lastSnapshot.detectorStatus) {
                 <div>
-                  <p class="text-xs text-ink-muted mb-1">Détecteurs</p>
+                  <p class="text-xs text-ink-muted mb-1">{{ 'controllerDetail.detectors' | t }}</p>
                   @for (kv of objectEntries(c.lastSnapshot.detectorStatus); track kv[0]) {
                     <p class="tnum">{{ kv[0] }} = {{ kv[1] }}</p>
                   }
@@ -133,29 +194,51 @@ function formatUptime(ticks: number | null): string {
         }
 
         <div class="card p-5">
-          <div class="flex items-center gap-3 mb-4">
-            <span class="icon-badge" [innerHTML]="icon.chart | safeHtml"></span>
-            <h2 class="font-semibold text-ink">Historique (24h)</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div class="flex items-center gap-3">
+              <span class="icon-badge" [innerHTML]="icon.chart | safeHtml"></span>
+              <h2 class="font-semibold text-ink">{{ 'controllerDetail.history' | t }}</h2>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              @for (range of ranges; track range.hours) {
+                <button
+                  type="button"
+                  class="btn"
+                  [class.btn-primary]="historyHours() === range.hours"
+                  [class.btn-ghost]="historyHours() !== range.hours"
+                  (click)="setHistoryRange(range.hours)"
+                >
+                  {{ range.key | t }}
+                </button>
+              }
+            </div>
           </div>
-          <canvas #historyCanvas height="80"></canvas>
+          <div class="grid gap-6 sm:grid-cols-2">
+            @for (chartDef of chartDefs; track chartDef.key) {
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">{{ chartDef.titleKey ? (chartDef.titleKey | t) : chartDef.key }}</p>
+                <canvas #chartCanvas height="140"></canvas>
+              </div>
+            }
+          </div>
         </div>
 
         <div class="card p-5">
           <div class="flex items-center gap-3 mb-4">
             <span class="icon-badge" [innerHTML]="icon.history | safeHtml"></span>
-            <h2 class="font-semibold text-ink">Journal des alarmes</h2>
+            <h2 class="font-semibold text-ink">{{ 'controllerDetail.alarmJournal' | t }}</h2>
           </div>
           @if (events().length === 0) {
-            <p class="text-sm text-ink-muted">Aucune transition d'alarme enregistrée.</p>
+            <p class="text-sm text-ink-muted">{{ 'controllerDetail.noTransitions' | t }}</p>
           } @else {
             <ul class="flex flex-col">
               @for (event of pagedEvents(); track event._id) {
                 <li class="table-row py-2 flex items-center justify-between gap-3 text-sm">
                   <span class="flex items-center gap-2">
                     <span class="chip" [class.chip-crit]="event.state === 'active'" [class.chip-good]="event.state === 'cleared'">
-                      <span class="chip-dot"></span>{{ event.state === 'active' ? 'Apparue' : 'Disparue' }}
+                      <span class="chip-dot"></span>{{ (event.state === 'active' ? 'controllerDetail.appeared' : 'controllerDetail.cleared') | t }}
                     </span>
-                    {{ event.flag }}
+                    {{ translatedAlarmLabel(event.flag) }}
                   </span>
                   <span class="text-ink-muted tnum">{{ event.occurredAt | date: 'medium' }}</span>
                 </li>
@@ -164,11 +247,11 @@ function formatUptime(ticks: number | null): string {
             @if (totalPages() > 1) {
               <div class="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-line">
                 <button type="button" class="btn btn-ghost" [disabled]="page() === 1" (click)="page.set(page() - 1)">
-                  ← Précédent
+                  ← {{ 'common.previous' | t }}
                 </button>
-                <span class="text-xs text-ink-muted">Page {{ page() }} / {{ totalPages() }}</span>
+                <span class="text-xs text-ink-muted">{{ 'common.page' | t }} {{ page() }} / {{ totalPages() }}</span>
                 <button type="button" class="btn btn-ghost" [disabled]="page() === totalPages()" (click)="page.set(page() + 1)">
-                  Suivant →
+                  {{ 'common.next' | t }} →
                 </button>
               </div>
             }
@@ -178,15 +261,18 @@ function formatUptime(ticks: number | null): string {
     }
   `,
 })
-export class ControllerDetailComponent implements OnInit, AfterViewInit {
+export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private controllerService = inject(ControllerService);
   private alarmEventService = inject(AlarmEventService);
+  private i18n = inject(I18nService);
 
   icon = ICON;
+  ranges = HISTORY_RANGES;
+  chartDefs = HISTORY_CHARTS;
 
-  @ViewChild('historyCanvas') historyCanvas?: ElementRef<HTMLCanvasElement>;
-  private chart?: Chart;
+  @ViewChildren('chartCanvas') chartCanvases?: QueryList<ElementRef<HTMLCanvasElement>>;
+  private charts: Chart[] = [];
 
   private readonly PAGE_SIZE = 10;
 
@@ -194,6 +280,10 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
   events = signal<AlarmEvent[]>([]);
   polling = signal(false);
   page = signal(1);
+  historyHours = signal(24);
+  liveConnected = signal(true);
+  lastUpdate = signal<Date | null>(null);
+  private liveSub?: Subscription;
   pagedEvents = computed(() => {
     const start = (this.page() - 1) * this.PAGE_SIZE;
     return this.events().slice(start, start + this.PAGE_SIZE);
@@ -202,14 +292,43 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
 
   private controllerId!: string;
   private history?: ControllerHistory;
+  private viewReady = false;
 
   ngOnInit(): void {
     this.controllerId = this.route.snapshot.paramMap.get('id')!;
     this.load();
+    this.lastUpdate.set(new Date());
+
+    // Lightweight live refresh: re-fetch the controller (status + current
+    // alarms) and the alarm log every tick, but not the history/charts —
+    // re-rendering four canvases every 15s would just flicker for no real
+    // benefit between poll sweeps. exhaustMap drops a tick if the previous
+    // one hasn't resolved yet, so a slow/stalled request can't pile up.
+    this.liveSub = refreshWhileVisible()
+      .pipe(
+        exhaustMap(() =>
+          this.controllerService.getById(this.controllerId).pipe(catchError(() => of(null)))
+        )
+      )
+      .subscribe((c) => {
+        if (c) {
+          this.controller.set(c);
+          this.liveConnected.set(true);
+          this.lastUpdate.set(new Date());
+          this.alarmEventService.getByController(this.controllerId).subscribe((events) => this.events.set(events));
+        } else {
+          this.liveConnected.set(false);
+        }
+      });
   }
 
   ngAfterViewInit(): void {
-    if (this.history) this.renderChart(this.history);
+    this.viewReady = true;
+    if (this.history) this.renderCharts(this.history);
+  }
+
+  ngOnDestroy(): void {
+    this.liveSub?.unsubscribe();
   }
 
   load(): void {
@@ -218,10 +337,52 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
       this.events.set(events);
       this.page.set(1);
     });
-    this.controllerService.getHistory(this.controllerId).subscribe((history) => {
+    this.loadHistory();
+  }
+
+  loadHistory(): void {
+    this.controllerService.getHistory(this.controllerId, this.historyHours()).subscribe((history) => {
       this.history = history;
-      this.renderChart(history);
+      if (this.viewReady) this.renderCharts(history);
     });
+  }
+
+  setHistoryRange(hours: number): void {
+    if (this.historyHours() === hours) return;
+    this.historyHours.set(hours);
+    this.loadHistory();
+  }
+
+  reportBusy = signal(false);
+
+  translatedAlarmLabel(label: string): string {
+    return translateAlarmLabel(label, this.i18n.lang());
+  }
+
+  /**
+   * Captures the four already-rendered chart canvases as PNGs (`toDataURL`)
+   * rather than re-rendering the charts inside the PDF generator — this
+   * automatically respects whatever period is currently selected on screen,
+   * with no separate charting logic to keep in sync.
+   */
+  async downloadReport(controller: Controller): Promise<void> {
+    this.reportBusy.set(true);
+    try {
+      const canvases = this.chartCanvases?.toArray() ?? [];
+      const charts: ChartImage[] = HISTORY_CHARTS.map((def, i) => {
+        const canvas = canvases[i]?.nativeElement;
+        const title = def.titleKey ? this.i18n.t(def.titleKey) : def.key;
+        return canvas ? { title, dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height } : null;
+      }).filter((c): c is ChartImage => c !== null);
+
+      const project = controller.project && typeof controller.project === 'object' ? (controller.project as Project) : null;
+      const periodLabel = this.ranges.find((r) => r.hours === this.historyHours())?.key;
+      const periodText = periodLabel ? this.i18n.t(periodLabel) : this.i18n.t('history.24h');
+
+      await downloadSingleControllerReport(controller, project, charts, periodText);
+    } finally {
+      this.reportBusy.set(false);
+    }
   }
 
   pollNow(): void {
@@ -236,7 +397,7 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
   }
 
   uptime(): string {
-    return formatUptime(this.controller()?.lastSnapshot.sysUpTimeTicks ?? null);
+    return formatUptime(this.controller()?.lastSnapshot.sysUpTimeTicks ?? null, this.i18n.lang());
   }
 
   projectId(c: Controller): string {
@@ -247,49 +408,90 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit {
     return Object.entries(obj);
   }
 
-  private renderChart(history: ControllerHistory): void {
-    const canvas = this.historyCanvas?.nativeElement;
-    if (!canvas) return;
+  /**
+   * One chart per `HISTORY_CHARTS` entry, in the same order the canvases are
+   * rendered in the `@for` loop — a fixed-length static array, so the
+   * QueryList's index always lines up with `chartDefs`' index.
+   */
+  private renderCharts(history: ControllerHistory): void {
+    const canvases = this.chartCanvases?.toArray();
+    if (!canvases?.length) return;
 
     const rootStyles = getComputedStyle(document.documentElement);
     const lineColor = rootStyles.getPropertyValue('--chart-line').trim() || '#ff5a1f';
     const gridColor = rootStyles.getPropertyValue('--chart-grid').trim() || '#ece5df';
     const inkMuted = rootStyles.getPropertyValue('--ink-muted').trim() || '#756b6d';
+    const lang = this.i18n.lang();
+    const locale = lang === 'fr' ? 'fr-CA' : 'en-US';
+    const valueLabel = this.i18n.t('controllerDetail.chartValue');
+    const noAlarmLabel = this.i18n.t('controllerDetail.chartNoAlarm');
 
-    this.chart?.destroy();
-    this.chart = new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: history.readings.map((r) =>
-          new Date(r.ts).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })
-        ),
-        datasets: [
-          {
-            label: 'Alarmes actives',
-            data: history.readings.map((r) => r.activeFlags.length),
-            borderColor: lineColor,
-            backgroundColor: lineColor,
-            stepped: true,
-            pointRadius: 0,
-            borderWidth: 2,
+    this.charts.forEach((c) => c.destroy());
+    this.charts = [];
+
+    // Long ranges (4 weeks at a 1-minute-ish granularity) can carry a lot of
+    // points — a compact date+time label keeps the x-axis legible instead of
+    // repeating just a time-of-day across many different days.
+    const multiDay = this.historyHours() > 24;
+    const labels = history.readings.map((r) =>
+      new Date(r.ts).toLocaleString(locale, multiDay
+        ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+        : { hour: '2-digit', minute: '2-digit' }
+      )
+    );
+
+    HISTORY_CHARTS.forEach((def, i) => {
+      const canvas = canvases[i]?.nativeElement;
+      if (!canvas) return;
+
+      const title = def.titleKey ? this.i18n.t(def.titleKey) : def.key;
+      const chart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: title,
+              data: history.readings.map(def.extract),
+              borderColor: lineColor,
+              backgroundColor: lineColor,
+              stepped: true,
+              pointRadius: 0,
+              borderWidth: 2,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: def.decode
+              ? {
+                  callbacks: {
+                    label: (ctx) => {
+                      const value = ctx.parsed.y;
+                      const flags = def.decode!(value, lang);
+                      return flags.length ? [`${valueLabel} : ${value}`, ...flags] : [`${valueLabel} : ${value} (${noAlarmLabel})`];
+                    },
+                  },
+                }
+              : undefined,
           },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: {
-            grid: { color: gridColor },
-            ticks: { color: inkMuted, maxTicksLimit: 8 },
-          },
-          y: {
-            beginAtZero: true,
-            ticks: { stepSize: 1, color: inkMuted },
-            grid: { color: gridColor },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: inkMuted, maxTicksLimit: 6 },
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { color: inkMuted, precision: 0 },
+              grid: { color: gridColor },
+            },
           },
         },
-      },
+      });
+      this.charts.push(chart);
     });
   }
 }

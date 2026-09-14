@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, computed, signal } from '@angular/core';
+import { Component, Input, computed, inject, signal } from '@angular/core';
+import { translateAlarmLabel } from '../core/alarm-bits';
+import { I18nService } from '../i18n/i18n.service';
 import { ControllerSnapshot } from '../models/controller';
 
 /**
@@ -29,6 +31,7 @@ import { ControllerSnapshot } from '../models/controller';
   `,
 })
 export class SignalBadgeComponent {
+  private i18n = inject(I18nService);
   private readonly snapshotSig = signal<ControllerSnapshot | null>(null);
   private readonly reachableSig = signal<boolean>(false);
 
@@ -46,17 +49,19 @@ export class SignalBadgeComponent {
   });
 
   readonly label = computed(() => {
-    if (!this.reachableSig()) return 'Injoignable';
+    const lang = this.i18n.lang();
+    if (!this.reachableSig()) return this.i18n.t('status.unreachable');
     const flags = this.snapshotSig()?.activeFlags ?? [];
-    if (flags.length === 0) return 'OK';
-    if (flags.length === 1) return flags[0].split(' - ')[0];
-    return `${flags.length} alarmes actives`;
+    if (flags.length === 0) return this.i18n.t('status.ok');
+    if (flags.length === 1) return translateAlarmLabel(flags[0], lang).split(' - ')[0];
+    return this.i18n.t('status.activeAlarmsCount', { count: flags.length });
   });
 
   readonly tooltip = computed(() => {
+    const lang = this.i18n.lang();
     const flags = this.snapshotSig()?.activeFlags ?? [];
-    if (!this.reachableSig()) return this.snapshotSig()?.error ?? 'Aucune réponse SNMP';
-    if (flags.length === 0) return 'Aucune alarme active';
-    return flags.join('\n');
+    if (!this.reachableSig()) return this.snapshotSig()?.error ?? this.i18n.t('status.noSnmpResponse');
+    if (flags.length === 0) return this.i18n.t('status.noActiveAlarm');
+    return flags.map((f) => translateAlarmLabel(f, lang)).join('\n');
   });
 }

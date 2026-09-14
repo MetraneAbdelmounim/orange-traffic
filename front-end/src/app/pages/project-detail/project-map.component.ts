@@ -4,6 +4,8 @@ import { Router } from '@angular/router';
 import { LngLatBounds, Map as MapLibreMap, Marker, NavigationControl, Popup, ScaleControl } from 'maplibre-gl';
 import { controllerUiUrl, hasCoordinates, modemUiUrl, streetViewUrl } from '../../core/controller-links';
 import { ThemeService } from '../../core/services/theme.service';
+import { I18nService } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { Controller } from '../../models/controller';
 
 /**
@@ -41,32 +43,32 @@ const POPUP_ICON = {
 @Component({
   selector: 'app-project-map',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslatePipe],
   template: `
     <section class="card overflow-hidden">
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4">
         <div class="flex items-center gap-2 text-sm text-ink-secondary">
-          <span class="chip chip-good"><span class="chip-dot"></span>OK</span>
-          <span class="chip chip-crit"><span class="chip-dot"></span>Alarme</span>
-          <span class="chip chip-neutral"><span class="chip-dot"></span>Injoignable</span>
+          <span class="chip chip-good"><span class="chip-dot"></span>{{ 'status.ok' | t }}</span>
+          <span class="chip chip-crit"><span class="chip-dot"></span>{{ 'status.critical' | t }}</span>
+          <span class="chip chip-neutral"><span class="chip-dot"></span>{{ 'status.unreachable' | t }}</span>
           @if (unlocatedCount() > 0) {
-            <span class="text-xs text-ink-muted">· {{ unlocatedCount() }} sans coordonnées</span>
+            <span class="text-xs text-ink-muted">· {{ unlocatedCount() }} {{ 'projectMap.noCoords' | t }}</span>
           }
         </div>
         <div class="flex items-center gap-2">
-          <button type="button" class="btn btn-ghost" (click)="fitToControllers()">Recentrer</button>
-          <button type="button" class="btn btn-ghost" (click)="toggleTilt()">{{ tilted ? 'Vue 2D' : 'Vue 3D' }}</button>
+          <button type="button" class="btn btn-ghost" (click)="fitToControllers()">{{ 'projectMap.recenter' | t }}</button>
+          <button type="button" class="btn btn-ghost" (click)="toggleTilt()">{{ (tilted ? 'projectMap.view2d' : 'projectMap.view3d') | t }}</button>
         </div>
       </div>
 
       @if (controllers.length === 0) {
-        <div class="p-12 text-center text-sm text-ink-muted">Aucun contrôleur dans ce projet.</div>
+        <div class="p-12 text-center text-sm text-ink-muted">{{ 'projectDetail.noControllers' | t }}</div>
       } @else {
         <div class="grid gap-4 p-4 lg:grid-cols-[1fr_20rem]">
           <div class="overflow-hidden rounded-lg border border-line">
             @if (located().length === 0) {
               <div class="flex h-[60vh] items-center justify-center p-12 text-center text-sm text-ink-muted">
-                Aucun contrôleur de ce projet n'a de coordonnées valides — renseignez latitude/longitude pour les faire apparaître ici.
+                {{ 'projectMap.noValidCoords' | t }}
               </div>
             } @else {
               <div #mapContainer class="h-[60vh] w-full"></div>
@@ -75,7 +77,7 @@ const POPUP_ICON = {
 
           <aside class="card flex max-h-[60vh] flex-col overflow-hidden">
             <div class="border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              Contrôleurs ({{ controllers.length }})
+              {{ 'controllers.title' | t }} ({{ controllers.length }})
             </div>
             <ul class="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
               @for (c of controllers; track c._id) {
@@ -123,6 +125,7 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
 
   private theme = inject(ThemeService);
   private router = inject(Router);
+  private i18n = inject(I18nService);
 
   tilted = true;
   selectedId = signal<string | null>(null);
@@ -265,7 +268,10 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
     element.classList.toggle('is-down', alarmed === 0 && offline > 0);
     element.classList.toggle('is-group', controllers.length > 1);
     element.textContent = controllers.length > 1 ? String(controllers.length) : '';
-    element.title = controllers.length === 1 ? `${controllers[0].nom} (${controllers[0].ip})` : `${controllers.length} contrôleurs ici`;
+    element.title =
+      controllers.length === 1
+        ? `${controllers[0].nom} (${controllers[0].ip})`
+        : this.i18n.t('projectMap.controllersHere', { count: controllers.length });
     element.setAttribute('aria-label', element.title);
   }
 
@@ -284,17 +290,18 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
   }
 
   private popupHtml(controllers: Controller[]): string {
+    const t = (key: any, params?: Record<string, string | number>) => this.escape(this.i18n.t(key, params));
     const row = (c: Controller) => {
       const alarmed = c.status && c.lastSnapshot.activeFlags.length > 0;
       const state = !c.status ? 'is-down' : alarmed ? 'is-crit' : 'is-up';
-      const label = !c.status ? 'Injoignable' : alarmed ? `${c.lastSnapshot.activeFlags.length} alarme(s)` : 'OK';
+      const label = !c.status ? t('status.unreachable') : alarmed ? t('projectMap.alarmCount', { count: c.lastSnapshot.activeFlags.length }) : t('status.ok');
       const id = this.escape(c._id);
       const links = [
         hasCoordinates(c)
-          ? `<a class="map-popup-link" href="${this.escape(streetViewUrl(c))}" target="_blank" rel="noopener">${POPUP_ICON.streetView}Street View</a>`
+          ? `<a class="map-popup-link" href="${this.escape(streetViewUrl(c))}" target="_blank" rel="noopener">${POPUP_ICON.streetView}${t('projectDetail.streetView')}</a>`
           : '',
-        `<a class="map-popup-link" href="${this.escape(controllerUiUrl(c))}" target="_blank" rel="noopener">${POPUP_ICON.device}Contrôleur</a>`,
-        `<a class="map-popup-link" href="${this.escape(modemUiUrl(c))}" target="_blank" rel="noopener">${POPUP_ICON.modem}Modem</a>`,
+        `<a class="map-popup-link" href="${this.escape(controllerUiUrl(c))}" target="_blank" rel="noopener">${POPUP_ICON.device}${t('projectDetail.controllerLink')}</a>`,
+        `<a class="map-popup-link" href="${this.escape(modemUiUrl(c))}" target="_blank" rel="noopener">${POPUP_ICON.modem}${t('projectDetail.modemLink')}</a>`,
       ]
         .filter(Boolean)
         .join('');
@@ -313,7 +320,7 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
     const header =
       controllers.length === 1
         ? `<p class="map-popup-title">${this.escape(controllers[0].nom)}</p>`
-        : `<p class="map-popup-title">${controllers.length} contrôleurs à cet emplacement</p>`;
+        : `<p class="map-popup-title">${t('projectMap.multipleControllersHere', { count: controllers.length })}</p>`;
 
     return `<div class="map-popup">${header}<ul class="map-popup-list">${controllers.map(row).join('')}</ul></div>`;
   }

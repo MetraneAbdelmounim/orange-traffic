@@ -1,17 +1,24 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Subscription, catchError, exhaustMap, of } from 'rxjs';
+import { refreshWhileVisible } from '../../core/auto-refresh';
 import { controllerUiUrl, hasCoordinates, modemUiUrl, streetViewUrl } from '../../core/controller-links';
 import { AuthService } from '../../core/services/auth.service';
 import { ControllerService } from '../../core/services/controller.service';
 import { ProjectService } from '../../core/services/project.service';
+import { translateApiError } from '../../i18n/backend-errors';
+import { I18nService } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { Controller } from '../../models/controller';
 import { Project } from '../../models/project';
+import { LiveIndicatorComponent } from '../../ui/live-indicator.component';
 import { ModalComponent } from '../../ui/modal.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 import { SafeHtmlPipe } from '../../ui/safe-html.pipe';
 import { SignalBadgeComponent } from '../../ui/signal-badge.component';
+import { downloadControllersCsv } from './controller-csv';
 import { downloadControllerReport } from './controller-report';
 import { ProjectMapComponent } from './project-map.component';
 
@@ -23,6 +30,7 @@ const REPORT_ICON = `<svg class="h-4 w-4" fill="none" stroke="currentColor" stro
 const STREET_VIEW_ICON = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" /></svg>`;
 const DEVICE_LINK_ICON = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" /></svg>`;
 const MODEM_LINK_ICON = `<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" /></svg>`;
+const TRASH_ICON = `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166M18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>`;
 
 type FormState = {
   nom: string;
@@ -47,30 +55,47 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
     ModalComponent,
     SafeHtmlPipe,
     ProjectMapComponent,
+    LiveIndicatorComponent,
+    TranslatePipe,
   ],
   template: `
     <div class="max-w-6xl mx-auto px-4 py-8">
+      <div class="flex justify-end mb-2">
+        <app-live-indicator [live]="liveConnected()" [lastUpdate]="lastUpdate()" />
+      </div>
       <app-page-header
         [title]="project()?.nom || ''"
         [subtitle]="project()?.description"
         [icon]="controllerIcon"
         [backLink]="['/projects']"
-        backLabel="Projets"
+        [backLabel]="'nav.projects' | t"
       >
-        <button type="button" class="btn btn-ghost" [disabled]="!controllers().length" (click)="downloadReport()">
-          <span [innerHTML]="reportIcon | safeHtml"></span>
-          Rapport
-        </button>
+        <div class="relative">
+          <button type="button" class="btn btn-ghost" [disabled]="!controllers().length" (click)="exportMenuOpen.set(!exportMenuOpen())">
+            <span [innerHTML]="reportIcon | safeHtml"></span>
+            {{ 'reports.export' | t }}
+          </button>
+          @if (exportMenuOpen()) {
+            <div class="export-menu">
+              <button type="button" class="export-menu-item" (click)="downloadReport(); exportMenuOpen.set(false)">
+                {{ 'reports.exportPdf' | t }}
+              </button>
+              <button type="button" class="export-menu-item" (click)="downloadCsv(); exportMenuOpen.set(false)">
+                {{ 'reports.exportCsv' | t }}
+              </button>
+            </div>
+          }
+        </div>
         @if (controllers().length) {
           <button type="button" class="btn btn-ghost" (click)="showMap.set(!showMap())">
             <span [innerHTML]="mapIcon | safeHtml"></span>
-            {{ showMap() ? 'Masquer la carte' : 'Carte' }}
+            {{ (showMap() ? 'projectDetail.hideMap' : 'projectDetail.map') | t }}
           </button>
         }
         @if (auth.isAdmin()) {
           <button type="button" class="btn btn-primary" (click)="openCreate()">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            Nouveau contrôleur
+            {{ 'controllers.new' | t }}
           </button>
         }
       </app-page-header>
@@ -90,7 +115,7 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
       } @else if (controllers().length === 0) {
         <div class="card p-12 text-center">
           <span class="icon-badge mx-auto mb-4" [innerHTML]="controllerIcon | safeHtml"></span>
-          <p class="text-ink font-medium">Aucun contrôleur dans ce projet</p>
+          <p class="text-ink font-medium">{{ 'projectDetail.noControllers' | t }}</p>
         </div>
       } @else {
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -102,17 +127,27 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
               [class.is-neutral]="!controller.status"
             >
               @if (auth.isAdmin()) {
-                <button
-                  type="button"
-                  class="icon-btn absolute top-4 right-4"
-                  title="Modifier"
-                  (click)="openEdit(controller); $event.stopPropagation()"
-                >
-                  <span [innerHTML]="editIcon | safeHtml"></span>
-                </button>
+                <div class="absolute top-4 right-4 flex gap-1.5">
+                  <button
+                    type="button"
+                    class="icon-btn"
+                    [title]="'common.edit' | t"
+                    (click)="openEdit(controller); $event.stopPropagation()"
+                  >
+                    <span [innerHTML]="editIcon | safeHtml"></span>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-danger"
+                    [title]="'common.delete' | t"
+                    (click)="openDeleteController(controller); $event.stopPropagation()"
+                  >
+                    <span [innerHTML]="trashIcon | safeHtml"></span>
+                  </button>
+                </div>
               }
               <a [routerLink]="['/controllers', controller._id]" class="flex flex-col gap-3">
-                <div class="flex items-start justify-between gap-2 pr-8">
+                <div class="flex items-start justify-between gap-2 pr-16">
                   <div class="flex items-center gap-3 min-w-0">
                     <span class="icon-badge" [innerHTML]="controllerIcon | safeHtml"></span>
                     <div class="min-w-0">
@@ -127,14 +162,14 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
               <div class="flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
                 @if (hasCoords(controller)) {
                   <a [href]="streetViewLink(controller)" target="_blank" rel="noopener" class="link-chip" (click)="$event.stopPropagation()">
-                    <span [innerHTML]="streetViewIcon | safeHtml"></span>Street View
+                    <span [innerHTML]="streetViewIcon | safeHtml"></span>{{ 'projectDetail.streetView' | t }}
                   </a>
                 }
                 <a [href]="controllerUiLink(controller)" target="_blank" rel="noopener" class="link-chip" (click)="$event.stopPropagation()">
-                  <span [innerHTML]="deviceLinkIcon | safeHtml"></span>Contrôleur
+                  <span [innerHTML]="deviceLinkIcon | safeHtml"></span>{{ 'projectDetail.controllerLink' | t }}
                 </a>
                 <a [href]="modemLink(controller)" target="_blank" rel="noopener" class="link-chip" (click)="$event.stopPropagation()">
-                  <span [innerHTML]="modemLinkIcon | safeHtml"></span>Modem
+                  <span [innerHTML]="modemLinkIcon | safeHtml"></span>{{ 'projectDetail.modemLink' | t }}
                 </a>
               </div>
             </div>
@@ -145,36 +180,36 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
 
     <app-modal
       [open]="showForm()"
-      [title]="editing() ? 'Modifier ' + editing()!.nom : 'Nouveau contrôleur'"
+      [title]="editing() ? (('common.edit' | t) + ' ' + editing()!.nom) : ('controllers.new' | t)"
       [hasFooter]="false"
       (closed)="showForm.set(false)"
     >
       <form class="grid gap-4 sm:grid-cols-2" (ngSubmit)="submit()">
         <div>
-          <label class="label" for="nom">Nom</label>
+          <label class="label" for="nom">{{ 'projectDetail.name' | t }}</label>
           <input id="nom" name="nom" class="field" [(ngModel)]="form.nom" required />
         </div>
         <div>
-          <label class="label" for="ip">Adresse IP</label>
+          <label class="label" for="ip">{{ 'projectDetail.ipAddress' | t }}</label>
           <input id="ip" name="ip" class="field" [(ngModel)]="form.ip" placeholder="10.8.3.20" required />
         </div>
         <div>
-          <label class="label" for="port">Port SNMP</label>
+          <label class="label" for="port">{{ 'projectDetail.snmpPort' | t }}</label>
           <input id="port" name="port" type="number" class="field" [(ngModel)]="form.port" />
         </div>
         <div>
-          <label class="label" for="community">Communauté SNMP</label>
+          <label class="label" for="community">{{ 'projectDetail.snmpCommunity' | t }}</label>
           <input id="community" name="community" class="field" [(ngModel)]="form.community" placeholder="public" />
         </div>
         <div>
-          <label class="label" for="latitude">Latitude</label>
+          <label class="label" for="latitude">{{ 'projectDetail.latitude' | t }}</label>
           <input id="latitude" name="latitude" type="number" step="any" class="field" [(ngModel)]="form.latitude" placeholder="31.6295" />
-          <p class="mt-1 text-xs text-ink-muted">Entre -90 et 90</p>
+          <p class="mt-1 text-xs text-ink-muted">{{ 'projectDetail.latitudeRange' | t }}</p>
         </div>
         <div>
-          <label class="label" for="longitude">Longitude</label>
+          <label class="label" for="longitude">{{ 'projectDetail.longitude' | t }}</label>
           <input id="longitude" name="longitude" type="number" step="any" class="field" [(ngModel)]="form.longitude" placeholder="-7.9811" />
-          <p class="mt-1 text-xs text-ink-muted">Entre -180 et 180</p>
+          <p class="mt-1 text-xs text-ink-muted">{{ 'projectDetail.longitudeRange' | t }}</p>
         </div>
 
         @if (formError()) {
@@ -182,10 +217,25 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
         }
 
         <div class="sm:col-span-2 flex justify-end gap-2 pt-2">
-          <button type="button" class="btn btn-ghost" (click)="showForm.set(false)">Annuler</button>
-          <button type="submit" class="btn btn-primary">{{ editing() ? 'Enregistrer' : 'Ajouter' }}</button>
+          <button type="button" class="btn btn-ghost" (click)="showForm.set(false)">{{ 'common.cancel' | t }}</button>
+          <button type="submit" class="btn btn-primary">{{ (editing() ? 'common.save' : 'projectDetail.add') | t }}</button>
         </div>
       </form>
+    </app-modal>
+
+    <app-modal [open]="!!deletingController()" [title]="'controllers.deleteTitle' | t" size="sm" (closed)="deletingController.set(null)">
+      <p class="text-sm text-ink-secondary">
+        <strong class="text-ink">{{ deletingController()?.nom }}</strong> — {{ 'controllers.deleteBody' | t }}
+      </p>
+      @if (deleteControllerError()) {
+        <p class="mt-3 chip chip-crit self-start"><span class="chip-dot"></span>{{ deleteControllerError() }}</p>
+      }
+      <ng-container modalFooter>
+        <button type="button" class="btn btn-ghost" (click)="deletingController.set(null)">{{ 'common.cancel' | t }}</button>
+        <button type="button" class="btn btn-danger" (click)="confirmDeleteController()" [disabled]="deleteControllerBusy()">
+          {{ (deleteControllerBusy() ? 'common.loading' : 'common.deletePermanently') | t }}
+        </button>
+      </ng-container>
     </app-modal>
   `,
   styles: [
@@ -206,13 +256,38 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
         background-color: var(--surface-hover);
         color: var(--brand-ink);
       }
+      .export-menu {
+        position: absolute;
+        top: calc(100% + 0.4rem);
+        left: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        min-width: 11rem;
+        padding: 0.4rem;
+        border-radius: 0.65rem;
+        border: 1px solid var(--line);
+        background-color: var(--surface);
+        box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+      }
+      .export-menu-item {
+        padding: 0.5rem 0.65rem;
+        border-radius: 0.5rem;
+        text-align: left;
+        font-size: 0.875rem;
+        color: var(--ink);
+      }
+      .export-menu-item:hover {
+        background-color: var(--surface-hover);
+      }
     `,
   ],
 })
-export class ProjectDetailComponent implements OnInit {
+export class ProjectDetailComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private projectService = inject(ProjectService);
   private controllerService = inject(ControllerService);
+  private i18n = inject(I18nService);
   auth = inject(AuthService);
 
   controllerIcon = CONTROLLER_ICON;
@@ -222,6 +297,7 @@ export class ProjectDetailComponent implements OnInit {
   streetViewIcon = STREET_VIEW_ICON;
   deviceLinkIcon = DEVICE_LINK_ICON;
   modemLinkIcon = MODEM_LINK_ICON;
+  trashIcon = TRASH_ICON;
 
   project = signal<Project | null>(null);
   controllers = signal<Controller[]>([]);
@@ -232,12 +308,43 @@ export class ProjectDetailComponent implements OnInit {
   formError = signal<string | null>(null);
   form: FormState = { ...EMPTY_FORM };
 
+  exportMenuOpen = signal(false);
+
+  deletingController = signal<Controller | null>(null);
+  deleteControllerBusy = signal(false);
+  deleteControllerError = signal<string | null>(null);
+
+  liveConnected = signal(true);
+  lastUpdate = signal<Date | null>(null);
+  private liveSub?: Subscription;
+
   private projectId!: string;
 
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('id')!;
     this.projectService.getById(this.projectId).subscribe((p) => this.project.set(p));
     this.load();
+    this.lastUpdate.set(new Date());
+
+    this.liveSub = refreshWhileVisible()
+      .pipe(
+        exhaustMap(() =>
+          this.controllerService.getByProject(this.projectId).pipe(catchError(() => of(null)))
+        )
+      )
+      .subscribe((controllers) => {
+        if (controllers) {
+          this.controllers.set(controllers);
+          this.liveConnected.set(true);
+          this.lastUpdate.set(new Date());
+        } else {
+          this.liveConnected.set(false);
+        }
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.liveSub?.unsubscribe();
   }
 
   load(): void {
@@ -276,13 +383,13 @@ export class ProjectDetailComponent implements OnInit {
   private validateCoordinates(): string | null {
     const { latitude, longitude } = this.form;
     if (latitude !== null && (!Number.isFinite(latitude) || Math.abs(latitude) > 90)) {
-      return 'Latitude invalide (doit être entre -90 et 90)';
+      return this.i18n.t('projectDetail.invalidLatitude');
     }
     if (longitude !== null && (!Number.isFinite(longitude) || Math.abs(longitude) > 180)) {
-      return 'Longitude invalide (doit être entre -180 et 180)';
+      return this.i18n.t('projectDetail.invalidLongitude');
     }
     if ((latitude === null) !== (longitude === null)) {
-      return 'Latitude et longitude doivent être renseignées ensemble';
+      return this.i18n.t('projectDetail.coordinatesTogether');
     }
     return null;
   }
@@ -316,12 +423,40 @@ export class ProjectDetailComponent implements OnInit {
         this.showForm.set(false);
         this.load();
       },
-      error: (err) => this.formError.set(err?.error?.error || 'Échec de l’enregistrement'),
+      error: (err) => this.formError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('projectDetail.saveFailed')),
     });
   }
 
   downloadReport(): void {
     void downloadControllerReport(this.project(), this.controllers());
+  }
+
+  downloadCsv(): void {
+    downloadControllersCsv(this.project(), this.controllers());
+  }
+
+  openDeleteController(controller: Controller): void {
+    this.deleteControllerError.set(null);
+    this.deletingController.set(controller);
+  }
+
+  confirmDeleteController(): void {
+    const controller = this.deletingController();
+    if (!controller) return;
+    this.deleteControllerBusy.set(true);
+    this.controllerService.delete(controller._id).subscribe({
+      next: () => {
+        this.deleteControllerBusy.set(false);
+        this.deletingController.set(null);
+        this.load();
+      },
+      error: (err) => {
+        this.deleteControllerBusy.set(false);
+        this.deleteControllerError.set(
+          translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('controllers.deleteFailed')
+        );
+      },
+    });
   }
 
   hasCoords(c: Controller): boolean {

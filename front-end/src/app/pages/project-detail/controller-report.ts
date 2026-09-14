@@ -1,35 +1,42 @@
 import jsPDF from 'jspdf';
 import autoTable, { CellHookData } from 'jspdf-autotable';
-import { AlarmDetail, Controller } from '../../models/controller';
+import { Controller } from '../../models/controller';
 import { Project } from '../../models/project';
+import {
+  BRAND_INK,
+  CRIT,
+  CRIT_SOFT,
+  GOOD,
+  GOOD_SOFT,
+  INK,
+  INK_MUTED,
+  LINE,
+  MARGIN,
+  NEUTRAL,
+  NEUTRAL_SOFT,
+  SUNKEN,
+  WHITE,
+  coord,
+  criticalityLabel,
+  drawBrandHeader,
+  drawFooter,
+  formatDateCompact,
+  loadImageWithRatio,
+  LogoInfo,
+  setFill,
+  setText,
+  slug,
+  worstCriticality,
+} from './pdf-shared';
 
 /**
- * The printed controller report, in the spirit of project-youness's
+ * The printed project report, in the spirit of project-youness's
  * `analysis-report.ts` (same jsPDF + jspdf-autotable stack, same light-theme
  * design tokens so the paper matches the screen) but adapted to alarm
  * criticality instead of solar performance, and carrying both the Orange
  * Traffic and InfraPulse marks in the header to signal this deployment.
  */
-type RGB = [number, number, number];
-
-const INK: RGB = [32, 29, 30];
-const INK_MUTED: RGB = [117, 107, 109];
-const LINE: RGB = [231, 224, 218];
-const SUNKEN: RGB = [240, 236, 232];
-const WHITE: RGB = [255, 255, 255];
-
-const BRAND: RGB = [255, 90, 31];
-const BRAND_INK: RGB = [184, 56, 10];
-
-const GOOD: RGB = [15, 122, 77];
-const GOOD_SOFT: RGB = [228, 246, 236];
-const CRIT: RGB = [198, 40, 40];
-const CRIT_SOFT: RGB = [253, 234, 234];
-const NEUTRAL: RGB = [107, 96, 98];
-const NEUTRAL_SOFT: RGB = [239, 234, 231];
-
 const PAGE = { width: 297, height: 210 };
-const MARGIN = 12;
 const HEADER_HEIGHT = 28;
 const SUMMARY_HEIGHT = 16;
 
@@ -47,139 +54,8 @@ const COLUMNS: { header: string; width: number; align: 'left' | 'right' | 'cente
   { header: 'Dernière comm.', width: 48, align: 'right' },
 ];
 
-function setFill(doc: jsPDF, c: RGB): void {
-  doc.setFillColor(c[0], c[1], c[2]);
-}
-function setText(doc: jsPDF, c: RGB): void {
-  doc.setTextColor(c[0], c[1], c[2]);
-}
-
-type LogoInfo = { data: string; ratio: number } | null;
-
-/** jsPDF cannot fetch a path on its own — this loads a local asset as a data URL. */
-async function loadImage(url: string): Promise<string | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    return await new Promise<string | null>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Loads a logo, re-encodes it as PNG via an offscreen canvas, and reports
- * its true pixel aspect ratio — two problems solved at once:
- *  - a fixed width/height box (the previous 28x10mm for InfraPulse's actual
- *    2153x260px asset, ratio 8.28) squashed it to a third of its natural
- *    width, so the caller instead gets a ratio and picks its own height;
- *  - jsPDF's own WEBP decoder does not composite alpha correctly (the
- *    Orange Traffic mark's transparent background came out solid black);
- *    routing every logo through a canvas draw uses the browser's decoder
- *    instead, which handles alpha correctly, and canvas always exports PNG.
- */
-async function loadImageWithRatio(url: string): Promise<LogoInfo> {
-  const raw = await loadImage(url);
-  if (!raw) return null;
-  return new Promise<LogoInfo>((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const ratio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1;
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || 1;
-      canvas.height = img.naturalHeight || 1;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve({ data: raw, ratio });
-        return;
-      }
-      ctx.drawImage(img, 0, 0);
-      resolve({ data: canvas.toDataURL('image/png'), ratio });
-    };
-    img.onerror = () => resolve(null);
-    img.src = raw;
-  });
-}
-
-function formatDateCompact(value: string | Date): string {
-  const date = value instanceof Date ? value : new Date(value);
-  const datePart = date.toLocaleDateString('fr-CA');
-  const timePart = date.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
-  return `${datePart}\n${timePart}`;
-}
-
-function coord(c: Controller): string {
-  const located = (Math.abs(c.latitude) > 0.001 || Math.abs(c.longitude) > 0.001) && Math.abs(c.latitude) <= 90 && Math.abs(c.longitude) <= 180;
-  return located ? `${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}` : '—';
-}
-
-function worstCriticality(alarms: AlarmDetail[]): 'critical' | 'warning' | null {
-  if (alarms.some((a) => a.criticality === 'critical')) return 'critical';
-  if (alarms.length > 0) return 'warning';
-  return null;
-}
-
-function criticalityLabel(level: 'critical' | 'warning' | null): string {
-  return level === 'critical' ? 'Critique' : level === 'warning' ? 'Avertissement' : '—';
-}
-
-// Print-tuned heights, one per mark — not identical, so the very wide
-// InfraPulse wordmark (natural ratio ~8.3) doesn't force a huge plate. The
-// 11:8.3 balance mirrors the ratio already used for the on-screen lockup
-// (see brand-logo.component.ts's size-lg: 2.6rem orange / 1.95rem infrapulse).
-const LOGO_OT_HEIGHT = 11;
-const LOGO_IP_HEIGHT = 8.3;
-const LOGO_GAP = 7;
-const LOGO_PAD_X = 4;
-const LOGO_PAD_Y = 4;
-
 function drawHeader(doc: jsPDF, projectName: string, logoOT: LogoInfo, logoIP: LogoInfo): void {
-  setFill(doc, BRAND);
-  doc.rect(0, 0, PAGE.width, HEADER_HEIGHT, 'F');
-
-  let textLeft = MARGIN;
-
-  if (logoOT || logoIP) {
-    const otW = logoOT ? LOGO_OT_HEIGHT * logoOT.ratio : 0;
-    const ipW = logoIP ? LOGO_IP_HEIGHT * logoIP.ratio : 0;
-    const plateWidth = LOGO_PAD_X * 2 + otW + (logoOT && logoIP ? LOGO_GAP : 0) + ipW;
-    const plateHeight = Math.max(LOGO_OT_HEIGHT, LOGO_IP_HEIGHT) + LOGO_PAD_Y * 2;
-    const plateTop = (HEADER_HEIGHT - plateHeight) / 2;
-
-    setFill(doc, WHITE);
-    doc.roundedRect(MARGIN, plateTop, plateWidth, plateHeight, 2, 2, 'F');
-
-    try {
-      let x = MARGIN + LOGO_PAD_X;
-      if (logoOT) {
-        const y = plateTop + (plateHeight - LOGO_OT_HEIGHT) / 2;
-        doc.addImage(logoOT.data, 'PNG', x, y, otW, LOGO_OT_HEIGHT, undefined, 'FAST');
-        x += otW + LOGO_GAP;
-      }
-      if (logoIP) {
-        const y = plateTop + (plateHeight - LOGO_IP_HEIGHT) / 2;
-        doc.addImage(logoIP.data, 'PNG', x, y, ipW, LOGO_IP_HEIGHT, undefined, 'FAST');
-      }
-    } catch {
-      /* An unreadable image must not abort the report. */
-    }
-    textLeft = MARGIN + plateWidth + 8;
-  }
-
-  setText(doc, WHITE);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('Rapport de supervision ATC-1500', textLeft, HEADER_HEIGHT / 2 - 1);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.text(projectName, textLeft, HEADER_HEIGHT / 2 + 6);
+  drawBrandHeader(doc, PAGE.width, HEADER_HEIGHT, 'Rapport de supervision ATC-1500', projectName, logoOT, logoIP);
 }
 
 function drawSummary(
@@ -212,32 +88,6 @@ function drawSummary(
   });
 }
 
-function drawFooter(doc: jsPDF, projectName: string, generatedAt: string): void {
-  const pages = doc.getNumberOfPages();
-  for (let page = 1; page <= pages; page++) {
-    doc.setPage(page);
-    const y = PAGE.height - 8;
-    doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
-    doc.setLineWidth(0.2);
-    doc.line(MARGIN, y - 4, PAGE.width - MARGIN, y - 4);
-    setText(doc, INK_MUTED);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text(`${projectName} — généré le ${generatedAt}`, MARGIN, y);
-    doc.text(`Page ${page} / ${pages}`, PAGE.width - MARGIN, y, { align: 'right' });
-  }
-}
-
-function slug(value: string): string {
-  return (
-    value
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'projet'
-  );
-}
-
 function ensureSpace(doc: jsPDF, y: number, needed: number, projectName: string, logoOT: LogoInfo, logoIP: LogoInfo): number {
   if (y + needed <= PAGE.height - 16) return y;
   doc.addPage();
@@ -268,6 +118,7 @@ function drawControllerDetail(
   const rowSpacing = 4.6;
 
   const fields: [string, string][] = [
+    ['ID', controller._id],
     ['Modèle', controller.model || '—'],
     ['Coordonnées', coord(controller)],
     ['sysDescr', (controller.lastSnapshot.sysDescr || '—').slice(0, 42)],
@@ -445,7 +296,7 @@ export async function downloadControllerReport(project: Project | null, controll
     y = drawControllerDetail(doc, controller, y, projectName, logoOT, logoIP);
   }
 
-  drawFooter(doc, projectName, generatedAt);
+  drawFooter(doc, PAGE.width, PAGE.height, projectName, generatedAt);
 
   const date = new Date().toISOString().slice(0, 10);
   doc.save(`rapport-orange-traffic_${slug(projectName)}_${date}.pdf`);

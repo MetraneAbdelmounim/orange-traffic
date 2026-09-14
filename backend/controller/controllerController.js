@@ -50,7 +50,13 @@ module.exports = {
   deleteController: asyncHandler(async (req, res) => {
     const result = await Controller.deleteOne({ _id: req.params.idController });
     if (!result.deletedCount) return res.status(404).json({ error: 'Contrôleur introuvable' });
-    await AlarmEvent.deleteMany({ controller: req.params.idController });
+    await Promise.all([
+      AlarmEvent.deleteMany({ controller: req.params.idController }),
+      // Time-series history is keyed by meta.controller — without this the
+      // readings outlive the controller they belong to for up to
+      // READING_RETENTION_DAYS, invisible orphans in the Reading collection.
+      Reading.deleteMany({ 'meta.controller': req.params.idController }),
+    ]);
     return res.status(200).json({ message: 'Le contrôleur a été supprimé avec succès' });
   }),
 

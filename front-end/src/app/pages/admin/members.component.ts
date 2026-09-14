@@ -3,6 +3,8 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MemberService } from '../../core/services/member.service';
 import { ProjectService } from '../../core/services/project.service';
+import { I18nService } from '../../i18n/i18n.service';
+import { TranslatePipe } from '../../i18n/translate.pipe';
 import { Member } from '../../models/member';
 import { Project } from '../../models/project';
 import { ModalComponent } from '../../ui/modal.component';
@@ -16,13 +18,13 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
 @Component({
   selector: 'app-members',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, ModalComponent, SafeHtmlPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, ModalComponent, SafeHtmlPipe, TranslatePipe],
   template: `
     <div class="max-w-5xl mx-auto px-4 py-8">
-      <app-page-header title="Membres" [subtitle]="members().length + ' compte(s) · ' + adminCount() + ' administrateur(s)'" [icon]="membersIcon">
+      <app-page-header [title]="'users.title' | t" [subtitle]="(members().length + ' ' + ('users.accountCount' | t) + ' · ' + adminCount() + ' ' + ('users.adminCount' | t))" [icon]="membersIcon">
         <button type="button" class="btn btn-primary" (click)="openCreate()">
           <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Nouveau membre
+          {{ 'users.new' | t }}
         </button>
       </app-page-header>
 
@@ -30,17 +32,17 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
         @if (members().length === 0) {
           <div class="p-12 text-center">
             <span class="icon-badge mx-auto mb-4" [innerHTML]="membersIcon | safeHtml"></span>
-            <p class="text-ink font-medium">Aucun membre</p>
+            <p class="text-ink font-medium">{{ 'users.empty' | t }}</p>
           </div>
         } @else {
           <table class="w-full">
             <thead>
               <tr class="border-b border-line bg-sunken">
-                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Utilisateur</th>
-                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Rôle</th>
-                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Projets</th>
-                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Alertes</th>
-                <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink-muted">Actions</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">{{ 'users.user' | t }}</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">{{ 'users.role' | t }}</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">{{ 'users.projects' | t }}</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">{{ 'users.alerts' | t }}</th>
+                <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-ink-muted">{{ 'users.actions' | t }}</th>
               </tr>
             </thead>
             <tbody>
@@ -54,25 +56,25 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
                   </td>
                   <td class="px-5 py-3.5">
                     <span class="chip" [class.chip-brand]="member.isAdmin" [class.chip-neutral]="!member.isAdmin">
-                      {{ member.isAdmin ? 'Administrateur' : 'Utilisateur' }}
+                      {{ (member.isAdmin ? 'users.admin' : 'users.regular') | t }}
                     </span>
                   </td>
                   <td class="px-5 py-3.5 text-sm text-ink-secondary">
-                    {{ member.isAdmin ? 'Tous les projets' : projectNames(member) }}
+                    {{ member.isAdmin ? ('users.allProjects' | t) : projectNames(member) }}
                   </td>
                   <td class="px-5 py-3.5">
                     @if (member.notifyOnCritical) {
-                      <span class="chip chip-good"><span class="chip-dot"></span>Activées</span>
+                      <span class="chip chip-good"><span class="chip-dot"></span>{{ 'users.alertsOn' | t }}</span>
                     } @else {
-                      <span class="chip chip-neutral"><span class="chip-dot"></span>Désactivées</span>
+                      <span class="chip chip-neutral"><span class="chip-dot"></span>{{ 'users.alertsOff' | t }}</span>
                     }
                   </td>
                   <td class="px-5 py-3.5">
                     <div class="flex justify-end gap-1.5">
-                      <button type="button" (click)="openEdit(member)" title="Modifier" class="icon-btn">
+                      <button type="button" (click)="openEdit(member)" [title]="'common.edit' | t" class="icon-btn">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
                       </button>
-                      <button type="button" (click)="openDelete(member)" title="Supprimer" class="icon-btn icon-btn-danger">
+                      <button type="button" (click)="openDelete(member)" [title]="'common.delete' | t" class="icon-btn icon-btn-danger">
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166M18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
                       </button>
                     </div>
@@ -86,16 +88,16 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
     </div>
 
     <!-- Create / edit -->
-    <app-modal [open]="crudOpen()" [title]="editing() ? 'Modifier ' + editing()!.username : 'Nouveau membre'" [hasFooter]="false" (closed)="crudOpen.set(false)">
+    <app-modal [open]="crudOpen()" [title]="editing() ? (('common.edit' | t) + ' ' + editing()!.username) : ('users.new' | t)" [hasFooter]="false" (closed)="crudOpen.set(false)">
       <form class="flex flex-col gap-4" (ngSubmit)="submit()">
         <div>
-          <label class="label" for="username">Nom d'utilisateur</label>
+          <label class="label" for="username">{{ 'users.username' | t }}</label>
           <input id="username" name="username" class="field" [(ngModel)]="form.username" [readonly]="!!editing()" required />
         </div>
 
         <div>
-          <label class="label" for="email">E-mail</label>
-          <input id="email" name="email" type="email" class="field" [(ngModel)]="form.email" placeholder="prenom.nom@exemple.com" />
+          <label class="label" for="email">{{ 'users.email' | t }}</label>
+          <input id="email" name="email" type="email" class="field" [(ngModel)]="form.email" [placeholder]="'common.emailPlaceholder' | t" />
         </div>
 
         @if (formError()) {
@@ -104,20 +106,20 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
 
         <label class="flex items-center gap-3">
           <input type="checkbox" name="isAdmin" class="h-4 w-4 rounded border-line" [(ngModel)]="form.isAdmin" />
-          <span class="text-sm text-ink">Administrateur (accès à tous les projets)</span>
+          <span class="text-sm text-ink">{{ 'users.adminHint' | t }}</span>
         </label>
 
         <label class="flex items-center gap-3">
           <input type="checkbox" name="notifyOnCritical" class="h-4 w-4 rounded border-line" [(ngModel)]="form.notifyOnCritical" [disabled]="!form.email.trim()" />
-          <span class="text-sm text-ink">Recevoir les alertes critiques par e-mail</span>
+          <span class="text-sm text-ink">{{ 'users.receiveCriticalAlerts' | t }}</span>
         </label>
-        @if (!form.email.trim() && form.notifyOnCritical) {
-          <p class="text-xs text-ink-muted -mt-2">Une adresse e-mail est requise pour activer les alertes.</p>
+        @if (!form.email.trim()) {
+          <p class="text-xs text-ink-muted -mt-2">{{ 'users.emailRequiredHint' | t }}</p>
         }
 
         @if (!form.isAdmin) {
           <div>
-            <span class="label">Projets accessibles</span>
+            <span class="label">{{ 'users.accessibleProjects' | t }}</span>
             <div class="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
               @for (project of projects(); track project._id) {
                 <label class="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-hover">
@@ -126,41 +128,41 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
                 </label>
               }
               @if (projects().length === 0) {
-                <p class="px-2 py-3 text-sm text-ink-muted">Aucun projet disponible.</p>
+                <p class="px-2 py-3 text-sm text-ink-muted">{{ 'users.noProjectsAvailable' | t }}</p>
               }
             </div>
           </div>
         }
 
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="btn btn-ghost" (click)="crudOpen.set(false)">Annuler</button>
-          <button type="submit" class="btn btn-primary">Enregistrer</button>
+          <button type="button" class="btn btn-ghost" (click)="crudOpen.set(false)">{{ 'common.cancel' | t }}</button>
+          <button type="submit" class="btn btn-primary">{{ 'common.save' | t }}</button>
         </div>
       </form>
     </app-modal>
 
     <!-- One-time credentials -->
-    <app-modal [open]="!!temporaryPassword()" title="Compte créé" size="sm" (closed)="temporaryPassword.set(null)">
+    <app-modal [open]="!!temporaryPassword()" [title]="'users.accountCreated' | t" size="sm" (closed)="temporaryPassword.set(null)">
       <p class="text-sm text-ink-secondary">
-        Communiquez ce mot de passe temporaire à <strong class="text-ink">{{ createdUsername() }}</strong>. Il ne sera plus affiché ensuite.
+        {{ 'users.tempPasswordHint1' | t }} <strong class="text-ink">{{ createdUsername() }}</strong>. {{ 'users.tempPasswordHint2' | t }}
       </p>
       <div class="mt-4 rounded-lg bg-sunken p-4">
-        <p class="label mb-1">Mot de passe temporaire</p>
+        <p class="label mb-1">{{ 'users.temporaryPassword' | t }}</p>
         <p class="break-all font-mono text-sm font-semibold text-ink">{{ temporaryPassword() }}</p>
       </div>
       <ng-container modalFooter>
-        <button type="button" class="btn btn-primary" (click)="temporaryPassword.set(null)">Compris</button>
+        <button type="button" class="btn btn-primary" (click)="temporaryPassword.set(null)">{{ 'common.understood' | t }}</button>
       </ng-container>
     </app-modal>
 
     <!-- Delete confirmation -->
-    <app-modal [open]="!!deleting()" title="Supprimer ce membre ?" size="sm" (closed)="deleting.set(null)">
+    <app-modal [open]="!!deleting()" [title]="'users.deleteTitle' | t" size="sm" (closed)="deleting.set(null)">
       <p class="text-sm text-ink-secondary">
-        Confirmez la suppression de <strong class="text-ink">{{ deleting()?.username }}</strong>. Cette action est irréversible.
+        {{ 'users.deleteBody' | t }} <strong class="text-ink">{{ deleting()?.username }}</strong>. {{ 'common.irreversible' | t }}
       </p>
       <ng-container modalFooter>
-        <button type="button" class="btn btn-ghost" (click)="deleting.set(null)">Annuler</button>
-        <button type="button" class="btn btn-danger" (click)="confirmDelete()">Supprimer</button>
+        <button type="button" class="btn btn-ghost" (click)="deleting.set(null)">{{ 'common.cancel' | t }}</button>
+        <button type="button" class="btn btn-danger" (click)="confirmDelete()">{{ 'common.delete' | t }}</button>
       </ng-container>
     </app-modal>
   `,
@@ -205,6 +207,7 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
 export class MembersComponent implements OnInit {
   private memberService = inject(MemberService);
   private projectService = inject(ProjectService);
+  private i18n = inject(I18nService);
 
   membersIcon = MEMBERS_ICON;
   members = signal<Member[]>([]);
@@ -237,7 +240,7 @@ export class MembersComponent implements OnInit {
   }
 
   projectNames(member: Member): string {
-    return member.projects.map((p) => p.nom).join(', ') || 'Aucun projet';
+    return member.projects.map((p) => p.nom).join(', ') || '—';
   }
 
   openCreate(): void {
@@ -269,7 +272,7 @@ export class MembersComponent implements OnInit {
   submit(): void {
     if (!this.form.username.trim()) return;
     if (this.form.notifyOnCritical && !this.form.email.trim()) {
-      this.formError.set('Une adresse e-mail est requise pour activer les alertes');
+      this.formError.set(this.i18n.t('users.emailRequiredError'));
       return;
     }
     this.formError.set(null);
@@ -288,7 +291,7 @@ export class MembersComponent implements OnInit {
             this.crudOpen.set(false);
             this.load();
           },
-          error: (err) => this.formError.set(err?.error?.error || 'Échec de la mise à jour'),
+          error: (err) => this.formError.set(err?.error?.error || this.i18n.t('users.updateFailed')),
         });
     } else {
       this.memberService.add({ ...this.form }).subscribe({
@@ -298,7 +301,7 @@ export class MembersComponent implements OnInit {
           this.temporaryPassword.set(res.temporaryPassword);
           this.load();
         },
-        error: (err) => this.formError.set(err?.error?.error || 'Échec de la création'),
+        error: (err) => this.formError.set(err?.error?.error || this.i18n.t('users.createFailed')),
       });
     }
   }

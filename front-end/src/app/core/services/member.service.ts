@@ -22,4 +22,11 @@ export class MemberService {
   delete(id: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`/api/members/${id}`);
   }
+
+  changePassword(
+    id: string,
+    data: { currentPass?: string; newPass: string; confirmedPass: string }
+  ): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>(`/api/members/password/${id}`, data);
+  }
 }
