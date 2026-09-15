@@ -49,8 +49,9 @@ const POPUP_ICON = {
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4">
         <div class="flex items-center gap-2 text-sm text-ink-secondary">
           <span class="chip chip-good"><span class="chip-dot"></span>{{ 'status.ok' | t }}</span>
+          <span class="chip chip-warn"><span class="chip-dot"></span>{{ 'status.warning' | t }}</span>
           <span class="chip chip-crit"><span class="chip-dot"></span>{{ 'status.critical' | t }}</span>
-          <span class="chip chip-neutral"><span class="chip-dot"></span>{{ 'status.unreachable' | t }}</span>
+          <span class="chip chip-crit"><span class="chip-dot"></span>{{ 'status.unreachable' | t }}</span>
           @if (unlocatedCount() > 0) {
             <span class="text-xs text-ink-muted">· {{ unlocatedCount() }} {{ 'projectMap.noCoords' | t }}</span>
           }
@@ -92,10 +93,7 @@ const POPUP_ICON = {
                       <span class="block truncate text-sm font-medium text-ink">{{ c.nom }}</span>
                       <span class="block font-mono text-xs text-ink-muted">{{ c.ip }}</span>
                     </span>
-                    <span
-                      class="h-2 w-2 flex-none rounded-full"
-                      [style.background-color]="c.maintenanceMode ? 'var(--warn)' : !c.status ? 'var(--neutral)' : c.lastSnapshot.activeFlags.length ? 'var(--crit)' : 'var(--good)'"
-                    ></span>
+                    <span class="h-2 w-2 flex-none rounded-full" [style.background-color]="dotColor(c)"></span>
                   </button>
                 </li>
               }
@@ -135,6 +133,25 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
 
   private isLocated(c: Controller): boolean {
     return hasCoordinates(c);
+  }
+
+  /**
+   * Red covers both "critical alarm" and "confirmed unreachable"; amber
+   * covers both "warning-only alarm" and "degraded/intermittent
+   * communication" — same severity pairing as SignalBadgeComponent, so the
+   * map and the controller pages never disagree about what a colour means.
+   */
+  private severity(c: Controller): 'good' | 'warn' | 'crit' {
+    if (c.communicationState === 'unreachable') return 'crit';
+    if (c.communicationState === 'degraded') return 'warn';
+    if (c.lastSnapshot.alarms.some((a) => a.criticality === 'critical')) return 'crit';
+    if (c.lastSnapshot.activeFlags.length > 0) return 'warn';
+    return 'good';
+  }
+
+  dotColor(c: Controller): string {
+    if (c.maintenanceMode) return 'var(--warn)';
+    return { good: 'var(--good)', warn: 'var(--warn)', crit: 'var(--crit)' }[this.severity(c)];
   }
 
   /** Controllers that carry real coordinates — (0,0) is the schema default for "not set". */
@@ -262,16 +279,16 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
   }
 
   private paintPin(element: HTMLElement, controllers: Controller[]): void {
-    // Maintenance-mode controllers are excluded from the alarmed/offline
-    // counts — same "full suppression" rule as the project aggregation and
-    // alertJob — so a group pin only turns amber, never red, for them.
+    // Maintenance-mode controllers are excluded from the group's worst
+    // severity — same "full suppression" rule as the project aggregation and
+    // alertJob — so a group pin only turns amber for them, never red/orange.
     const active = controllers.filter((c) => !c.maintenanceMode);
-    const alarmed = active.filter((c) => c.status && c.lastSnapshot.activeFlags.length > 0).length;
-    const offline = active.filter((c) => !c.status).length;
+    const crit = active.some((c) => this.severity(c) === 'crit');
+    const warn = !crit && active.some((c) => this.severity(c) === 'warn');
     const inMaintenance = controllers.some((c) => c.maintenanceMode);
-    element.classList.toggle('is-crit', alarmed > 0);
-    element.classList.toggle('is-down', alarmed === 0 && offline > 0);
-    element.classList.toggle('is-maintenance', alarmed === 0 && offline === 0 && inMaintenance);
+    element.classList.toggle('is-crit', crit);
+    element.classList.toggle('is-warn', warn);
+    element.classList.toggle('is-maintenance', !crit && !warn && inMaintenance);
     element.classList.toggle('is-group', controllers.length > 1);
     element.textContent = controllers.length > 1 ? String(controllers.length) : '';
     element.title =
@@ -298,15 +315,17 @@ export class ProjectMapComponent implements OnChanges, OnDestroy {
   private popupHtml(controllers: Controller[]): string {
     const t = (key: any, params?: Record<string, string | number>) => this.escape(this.i18n.t(key, params));
     const row = (c: Controller) => {
-      const alarmed = c.status && c.lastSnapshot.activeFlags.length > 0;
-      const state = c.maintenanceMode ? 'is-maintenance' : !c.status ? 'is-down' : alarmed ? 'is-crit' : 'is-up';
+      const sev = this.severity(c);
+      const state = c.maintenanceMode ? 'is-maintenance' : { good: 'is-up', warn: 'is-warn', crit: 'is-crit' }[sev];
       const label = c.maintenanceMode
         ? t('status.maintenance')
-        : !c.status
+        : c.communicationState === 'unreachable'
           ? t('status.unreachable')
-          : alarmed
-            ? t('projectMap.alarmCount', { count: c.lastSnapshot.activeFlags.length })
-            : t('status.ok');
+          : c.communicationState === 'degraded'
+            ? t('status.degraded')
+            : c.lastSnapshot.activeFlags.length > 0
+              ? t('projectMap.alarmCount', { count: c.lastSnapshot.activeFlags.length })
+              : t('status.ok');
       const id = this.escape(c._id);
       const links = [
         hasCoordinates(c)

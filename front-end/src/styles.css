@@ -193,6 +193,7 @@ button {
     border-top: 3px solid transparent;
   }
   .card-accent.is-crit { border-top-color: var(--crit); }
+  .card-accent.is-warn { border-top-color: var(--warn); }
   .card-accent.is-good { border-top-color: var(--good); }
   .card-accent.is-neutral { border-top-color: var(--line-strong); }
   .card-accent.is-maintenance { border-top-color: var(--warn); }
@@ -404,6 +405,8 @@ button {
   .signal-label.is-good { color: var(--good); }
   .signal-label.is-neutral { color: var(--ink-muted); }
   .signal-label.is-maintenance { color: var(--warn); }
+  .signal-label.is-unreachable { color: var(--crit); }
+  .signal-label.is-degraded { color: var(--warn); }
 
   /* --- Project map (MapLibre) ---------------------------------------------
      Pins and popups are created imperatively by MapLibre, outside Angular's
@@ -425,7 +428,7 @@ button {
     transform: scale(1.25);
   }
   .map-pin.is-crit { background-color: var(--crit); }
-  .map-pin.is-down { background-color: var(--neutral); }
+  .map-pin.is-warn { background-color: var(--warn); }
   .map-pin.is-maintenance { background-color: var(--warn); }
   .map-pin.is-group {
     width: 1.85rem;
@@ -450,7 +453,7 @@ button {
   .map-popup-item:first-child { border-top: 0; }
   .map-popup-state { width: 0.5rem; height: 0.5rem; border-radius: 9999px; flex: none; background-color: var(--good); }
   .map-popup-state.is-crit { background-color: var(--crit); }
-  .map-popup-state.is-down { background-color: var(--neutral); }
+  .map-popup-state.is-warn { background-color: var(--warn); }
   .map-popup-state.is-maintenance { background-color: var(--warn); }
   .map-popup-name { flex: 1; min-width: 0; font-size: 0.78rem; line-height: 1.15; }
   .map-popup-name a { color: var(--ink); font-weight: 600; text-decoration: none; }

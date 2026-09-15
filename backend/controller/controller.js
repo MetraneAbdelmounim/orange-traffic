@@ -17,6 +17,12 @@ const snapshotSchema = new mongoose.Schema(
     reachable: { type: Boolean, default: false },
     measuredAt: { type: Date, default: null },
     error: { type: String, default: null },
+    // Coarse cause behind `error`, when set — 'timeout' | 'snmp_error' |
+    // 'network_error'. Lets the UI/operator tell "device didn't answer in
+    // time" apart from "device answered but rejected the request" (e.g. a
+    // stale community string), which retrying can't fix. See
+    // backend/python/snmp_client.py.
+    errorReason: { type: String, default: null },
 
     sysDescr: { type: String, default: null },
     sysUpTimeTicks: { type: Number, default: null },
@@ -57,6 +63,12 @@ const controllerSchema = mongoose.Schema(
     // Reachability summary, refreshed by the poller on every sweep.
     status: { type: Boolean, default: false },
     lastSeenAt: { type: Date, default: null },
+    // Consecutive failed sweeps, reset to 0 on any success. Used to derive a
+    // 3-tier communication state (reachable/degraded/unreachable) so one
+    // isolated dropped UDP packet reads as "degraded" rather than an
+    // immediate false "Unreachable" — see controllerController.js's
+    // `communicationState`.
+    consecutiveFailures: { type: Number, default: 0 },
 
     // While true, alertJob.js skips this controller entirely (no email) and
     // the UI shows a neutral "maintenance" state instead of crit/warn colors.

@@ -32,6 +32,30 @@ function withAcknowledged(c) {
   return { ...c, acknowledged };
 }
 
+// Must match backend/python/config.py's DEGRADED_FAILURE_THRESHOLD — the
+// Python poller is the one incrementing/resetting consecutiveFailures, this
+// just interprets the counter it writes.
+const DEGRADED_FAILURE_THRESHOLD = 1;
+
+/**
+ * Derives a 3-tier communication state from the raw reachability/failure
+ * counter so one isolated dropped SNMP packet reads as "degraded" (amber)
+ * rather than an immediate false "unreachable" (red) — only confirmed after
+ * several consecutive failed sweeps does it escalate.
+ */
+function withCommunicationState(c) {
+  const communicationState = c.status
+    ? 'reachable'
+    : (c.consecutiveFailures || 0) <= DEGRADED_FAILURE_THRESHOLD
+      ? 'degraded'
+      : 'unreachable';
+  return { ...c, communicationState };
+}
+
+function withDerivedFields(c) {
+  return withCommunicationState(withAcknowledged(c));
+}
+
 module.exports = {
   addController: asyncHandler(async (req, res) => {
     const data = pick(req.body, WRITABLE);
@@ -73,7 +97,7 @@ module.exports = {
       .populate('project')
       .sort({ nom: 1 })
       .lean();
-    return res.status(200).json(controllers.map(withAcknowledged));
+    return res.status(200).json(controllers.map(withDerivedFields));
   }),
 
   /** Every controller the caller is allowed to see. */
@@ -82,7 +106,7 @@ module.exports = {
       .populate('project')
       .sort({ nom: 1 })
       .lean();
-    return res.status(200).json(controllers.map(withAcknowledged));
+    return res.status(200).json(controllers.map(withDerivedFields));
   }),
 
   getControllerById: asyncHandler(async (req, res) => {
@@ -92,7 +116,7 @@ module.exports = {
       .populate('project')
       .lean();
     if (!controller) return res.status(404).json({ error: 'Contrôleur introuvable' });
-    return res.status(200).json(withAcknowledged(controller));
+    return res.status(200).json(withDerivedFields(controller));
   }),
 
   /**
@@ -121,7 +145,13 @@ module.exports = {
     });
   }),
 
-  /** Alarm transition log — appeared/cleared flags, most recent first. */
+  /**
+   * Alarm transition log — appeared/cleared flags, most recent first.
+   * `hours` (optional) bounds the query to a time window instead of a fixed
+   * count — the controller-detail timeline needs every transition within the
+   * currently selected history period, which a count-based `limit` alone
+   * can't guarantee for a busy controller or a long period.
+   */
   getAlarmEventsByController: asyncHandler(async (req, res) => {
     const controller = await Controller.findOne(
       scopeToMember({ _id: req.params.idController }, req.member)
@@ -131,7 +161,12 @@ module.exports = {
     if (!controller) return res.status(404).json({ error: 'Contrôleur introuvable' });
 
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 1000);
-    const events = await AlarmEvent.find({ controller: controller._id })
+    const filter = { controller: controller._id };
+    if (req.query.hours) {
+      const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 24 * 90);
+      filter.occurredAt = { $gte: new Date(Date.now() - hours * 3600 * 1000) };
+    }
+    const events = await AlarmEvent.find(filter)
       .sort({ occurredAt: -1 })
       .limit(limit)
       .lean();
@@ -194,7 +229,7 @@ module.exports = {
       .populate('project')
       .lean();
     if (!controller) return res.status(404).json({ error: 'Contrôleur introuvable' });
-    return res.status(200).json(withAcknowledged(controller));
+    return res.status(200).json(withDerivedFields(controller));
   }),
 
   /**
@@ -222,6 +257,6 @@ module.exports = {
     )
       .populate('project')
       .lean();
-    return res.status(200).json(withAcknowledged(controller));
+    return res.status(200).json(withDerivedFields(controller));
   }),
 };

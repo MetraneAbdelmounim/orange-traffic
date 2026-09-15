@@ -1,17 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, QueryList, ViewChildren, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Chart, registerables } from 'chart.js';
 import { Subscription, catchError, exhaustMap, of } from 'rxjs';
 import { AlarmEventService } from '../../core/services/alarm-event.service';
-import {
-  UNIT_ALARM_STATUS_1_BITS,
-  UNIT_ALARM_STATUS_2_BITS,
-  SHORT_ALARM_STATUS_BITS,
-  decodeBits,
-  translateAlarmLabel,
-} from '../../core/alarm-bits';
+import { criticalityForLabel, translateAlarmLabel } from '../../core/alarm-bits';
 import { refreshWhileVisible } from '../../core/auto-refresh';
 import { AuthService } from '../../core/services/auth.service';
 import { ControllerService } from '../../core/services/controller.service';
@@ -33,14 +27,6 @@ Chart.register(...registerables);
 
 type ReadingRow = ControllerHistory['readings'][number];
 
-interface HistoryChartDef {
-  key: string;
-  /** Technical NTCIP object names (unitAlarmStatus1/2, shortAlarmStatus) are not translated — only "activeFlags" has a prose title. */
-  titleKey: TranslationKey | null;
-  extract: (r: ReadingRow) => number;
-  decode?: (value: number | null, lang: Language) => string[];
-}
-
 const HISTORY_RANGES: { key: TranslationKey; hours: number }[] = [
   { key: 'history.24h', hours: 24 },
   { key: 'history.1w', hours: 24 * 7 },
@@ -49,27 +35,77 @@ const HISTORY_RANGES: { key: TranslationKey; hours: number }[] = [
   { key: 'history.4w', hours: 24 * 28 },
 ];
 
-const HISTORY_CHARTS: HistoryChartDef[] = [
-  { key: 'activeFlags', titleKey: 'controllerDetail.chartActiveFlags', extract: (r) => r.activeFlags.length },
-  {
-    key: 'unitAlarmStatus1',
-    titleKey: null,
-    extract: (r) => r.unitAlarmStatus1 ?? 0,
-    decode: (v, lang) => decodeBits(v, UNIT_ALARM_STATUS_1_BITS, lang),
-  },
-  {
-    key: 'unitAlarmStatus2',
-    titleKey: null,
-    extract: (r) => r.unitAlarmStatus2 ?? 0,
-    decode: (v, lang) => decodeBits(v, UNIT_ALARM_STATUS_2_BITS, lang),
-  },
-  {
-    key: 'shortAlarmStatus',
-    titleKey: null,
-    extract: (r) => r.shortAlarmStatus ?? 0,
-    decode: (v, lang) => decodeBits(v, SHORT_ALARM_STATUS_BITS, lang),
-  },
-];
+interface TimelineSegment {
+  start: number;
+  end: number;
+}
+
+interface TimelineRow {
+  flag: string;
+  label: string;
+  criticality: 'critical' | 'warning';
+  segments: TimelineSegment[];
+}
+
+/**
+ * Reconstructs, per flag, the intervals during which it was active within
+ * [windowStart, windowEnd] — from the appeared/cleared journal alone, walked
+ * backward from the controller's *currently known* active flags (the one
+ * fact we're always sure of) rather than assuming what the state was at the
+ * start of the window. A flag still active at windowEnd, or already active
+ * at windowStart with no transition inside the window, both fall out of this
+ * walk correctly with no special-casing.
+ */
+function buildTimelineRows(
+  events: AlarmEvent[],
+  currentFlags: string[],
+  windowStart: number,
+  windowEnd: number
+): TimelineRow[] {
+  const byFlag = new Map<string, AlarmEvent[]>();
+  for (const e of events) {
+    if (!byFlag.has(e.flag)) byFlag.set(e.flag, []);
+    byFlag.get(e.flag)!.push(e);
+  }
+  for (const flag of currentFlags) {
+    if (!byFlag.has(flag)) byFlag.set(flag, []);
+  }
+
+  const rows: TimelineRow[] = [];
+  for (const [flag, flagEvents] of byFlag) {
+    // Events arrive newest-first from the API — exactly the order this walk needs.
+    const sorted = [...flagEvents].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+    const segments: TimelineSegment[] = [];
+    let active = currentFlags.includes(flag);
+    let cursor = windowEnd;
+
+    for (const event of sorted) {
+      const t = new Date(event.occurredAt).getTime();
+      if (event.state === 'active') {
+        if (active) segments.push({ start: t, end: cursor });
+        active = false;
+      } else {
+        active = true;
+      }
+      cursor = t;
+    }
+    if (active) segments.push({ start: windowStart, end: cursor });
+
+    if (segments.length > 0) {
+      rows.push({ flag, label: '', criticality: criticalityForLabel(flag), segments });
+    }
+  }
+
+  // Critical flags first, then most recently active — the alarms worth
+  // seeing first surface at the top of the timeline instead of alphabetical.
+  rows.sort((a, b) => {
+    if (a.criticality !== b.criticality) return a.criticality === 'critical' ? -1 : 1;
+    const aLast = Math.max(...a.segments.map((s) => s.end));
+    const bLast = Math.max(...b.segments.map((s) => s.end));
+    return bLast - aLast;
+  });
+  return rows;
+}
 
 const ICON = {
   controller: `<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" /></svg>`,
@@ -118,7 +154,7 @@ function formatUptime(ticks: number | null, lang: Language): string {
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-3">
-            <app-signal-badge [snapshot]="c.lastSnapshot" [reachable]="c.status" [maintenance]="c.maintenanceMode" />
+            <app-signal-badge [snapshot]="c.lastSnapshot" [communicationState]="c.communicationState" [maintenance]="c.maintenanceMode" />
             <button type="button" class="btn btn-ghost" [disabled]="reportBusy()" (click)="downloadReport(c)">
               <span [innerHTML]="icon.chart | safeHtml"></span>
               {{ (reportBusy() ? 'common.loading' : 'controllerDetail.downloadReport') | t }}
@@ -258,13 +294,16 @@ function formatUptime(ticks: number | null, lang: Language): string {
               }
             </div>
           </div>
-          <div class="grid gap-6 sm:grid-cols-2">
-            @for (chartDef of chartDefs; track chartDef.key) {
-              <div>
-                <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">{{ chartDef.titleKey ? (chartDef.titleKey | t) : chartDef.key }}</p>
-                <canvas #chartCanvas height="140"></canvas>
-              </div>
-            }
+          <div class="mb-8">
+            <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">{{ 'controllerDetail.timelineTitle' | t }}</p>
+            <p class="text-sm text-ink-muted py-6 text-center" [hidden]="timelineRows().length > 0">{{ 'controllerDetail.timelineEmpty' | t }}</p>
+            <div [style.height.px]="timelineHeight()" [hidden]="timelineRows().length === 0">
+              <canvas #timelineCanvas></canvas>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">{{ 'controllerDetail.chartActiveFlags' | t }}</p>
+            <canvas #activeFlagsCanvas height="140"></canvas>
           </div>
         </div>
 
@@ -341,15 +380,19 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
 
   icon = ICON;
   ranges = HISTORY_RANGES;
-  chartDefs = HISTORY_CHARTS;
 
-  @ViewChildren('chartCanvas') chartCanvases?: QueryList<ElementRef<HTMLCanvasElement>>;
-  private charts: Chart[] = [];
+  @ViewChild('activeFlagsCanvas') activeFlagsCanvasRef?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('timelineCanvas') timelineCanvasRef?: ElementRef<HTMLCanvasElement>;
+  private activeFlagsChart?: Chart;
+  private timelineChart?: Chart;
 
   private readonly PAGE_SIZE = 10;
+  private readonly TIMELINE_ROW_HEIGHT = 34;
 
   controller = signal<Controller | null>(null);
   events = signal<AlarmEvent[]>([]);
+  timelineRows = signal<TimelineRow[]>([]);
+  timelineHeight = computed(() => Math.max(80, this.timelineRows().length * this.TIMELINE_ROW_HEIGHT + 40));
   polling = signal(false);
   page = signal(1);
   historyHours = signal(24);
@@ -364,6 +407,7 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
 
   private controllerId!: string;
   private history?: ControllerHistory;
+  private timelineWindow = { start: 0, end: 0 };
   private viewReady = false;
 
   ngOnInit(): void {
@@ -396,7 +440,8 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
 
   ngAfterViewInit(): void {
     this.viewReady = true;
-    if (this.history) this.renderCharts(this.history);
+    if (this.history) this.renderActiveFlagsChart(this.history);
+    this.renderTimeline();
   }
 
   ngOnDestroy(): void {
@@ -410,12 +455,30 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
       this.page.set(1);
     });
     this.loadHistory();
+    this.loadTimeline();
   }
 
   loadHistory(): void {
     this.controllerService.getHistory(this.controllerId, this.historyHours()).subscribe((history) => {
       this.history = history;
-      if (this.viewReady) this.renderCharts(history);
+      if (this.viewReady) this.renderActiveFlagsChart(history);
+    });
+  }
+
+  /** Fetches every alarm transition within the selected period and rebuilds the timeline rows from it. */
+  loadTimeline(): void {
+    const hours = this.historyHours();
+    this.alarmEventService.getByController(this.controllerId, { hours, limit: 1000 }).subscribe((events) => {
+      const currentFlags = this.controller()?.lastSnapshot.activeFlags ?? [];
+      const windowEnd = Date.now();
+      const windowStart = windowEnd - hours * 3600 * 1000;
+      const rows = buildTimelineRows(events, currentFlags, windowStart, windowEnd);
+      this.timelineWindow = { start: windowStart, end: windowEnd };
+      this.timelineRows.set(rows);
+      // The canvas element is always in the DOM (toggled via [hidden], not
+      // @if) so the ViewChild ref is already valid here regardless of
+      // whether this is the first load or a period change.
+      if (this.viewReady) this.renderTimeline();
     });
   }
 
@@ -423,6 +486,7 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
     if (this.historyHours() === hours) return;
     this.historyHours.set(hours);
     this.loadHistory();
+    this.loadTimeline();
   }
 
   reportBusy = signal(false);
@@ -512,8 +576,8 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
   }
 
   /**
-   * Captures the four already-rendered chart canvases as PNGs (`toDataURL`)
-   * rather than re-rendering the charts inside the PDF generator — this
+   * Captures the already-rendered chart canvases as PNGs (`toDataURL`)
+   * rather than re-rendering them inside the PDF generator — this
    * automatically respects whatever period is currently selected on screen,
    * with no separate charting logic to keep in sync.
    */
@@ -524,12 +588,25 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
       // labels are hardcoded French), so every dynamic value fed into it is
       // resolved against the French dictionary directly — regardless of the
       // UI's current language — to avoid a mixed-language PDF.
-      const canvases = this.chartCanvases?.toArray() ?? [];
-      const charts: ChartImage[] = HISTORY_CHARTS.map((def, i) => {
-        const canvas = canvases[i]?.nativeElement;
-        const title = def.titleKey ? fr[def.titleKey] : def.key;
-        return canvas ? { title, dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height } : null;
-      }).filter((c): c is ChartImage => c !== null);
+      const charts: ChartImage[] = [];
+      const timelineCanvas = this.timelineCanvasRef?.nativeElement;
+      if (timelineCanvas && this.timelineRows().length > 0) {
+        charts.push({
+          title: fr['controllerDetail.timelineTitle'],
+          dataUrl: timelineCanvas.toDataURL('image/png'),
+          width: timelineCanvas.width,
+          height: timelineCanvas.height,
+        });
+      }
+      const activeFlagsCanvas = this.activeFlagsCanvasRef?.nativeElement;
+      if (activeFlagsCanvas) {
+        charts.push({
+          title: fr['controllerDetail.chartActiveFlags'],
+          dataUrl: activeFlagsCanvas.toDataURL('image/png'),
+          width: activeFlagsCanvas.width,
+          height: activeFlagsCanvas.height,
+        });
+      }
 
       const project = controller.project && typeof controller.project === 'object' ? (controller.project as Project) : null;
       const periodLabel = this.ranges.find((r) => r.hours === this.historyHours())?.key;
@@ -564,30 +641,24 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
     return Object.entries(obj);
   }
 
-  /**
-   * One chart per `HISTORY_CHARTS` entry, in the same order the canvases are
-   * rendered in the `@for` loop — a fixed-length static array, so the
-   * QueryList's index always lines up with `chartDefs`' index.
-   */
-  private renderCharts(history: ControllerHistory): void {
-    const canvases = this.chartCanvases?.toArray();
-    if (!canvases?.length) return;
-
+  private chartTheme() {
     const rootStyles = getComputedStyle(document.documentElement);
-    const lineColor = rootStyles.getPropertyValue('--chart-line').trim() || '#ff5a1f';
-    const gridColor = rootStyles.getPropertyValue('--chart-grid').trim() || '#ece5df';
-    const inkMuted = rootStyles.getPropertyValue('--ink-muted').trim() || '#756b6d';
-    const lang = this.i18n.lang();
-    const locale = lang === 'fr' ? 'fr-CA' : 'en-US';
-    const valueLabel = this.i18n.t('controllerDetail.chartValue');
-    const noAlarmLabel = this.i18n.t('controllerDetail.chartNoAlarm');
+    return {
+      lineColor: rootStyles.getPropertyValue('--chart-line').trim() || '#ff5a1f',
+      gridColor: rootStyles.getPropertyValue('--chart-grid').trim() || '#ece5df',
+      inkMuted: rootStyles.getPropertyValue('--ink-muted').trim() || '#756b6d',
+      crit: rootStyles.getPropertyValue('--crit').trim() || '#c4362f',
+      warn: rootStyles.getPropertyValue('--warn').trim() || '#8a6100',
+    };
+  }
 
-    this.charts.forEach((c) => c.destroy());
-    this.charts = [];
+  /** Simple count-of-active-alarms-over-time summary, from the Reading time series (unrelated to the AlarmEvent-driven timeline below). */
+  private renderActiveFlagsChart(history: ControllerHistory): void {
+    const canvas = this.activeFlagsCanvasRef?.nativeElement;
+    if (!canvas) return;
 
-    // Long ranges (4 weeks at a 1-minute-ish granularity) can carry a lot of
-    // points — a compact date+time label keeps the x-axis legible instead of
-    // repeating just a time-of-day across many different days.
+    const { lineColor, gridColor, inkMuted } = this.chartTheme();
+    const locale = this.i18n.lang() === 'fr' ? 'fr-CA' : 'en-US';
     const multiDay = this.historyHours() > 24;
     const labels = history.readings.map((r) =>
       new Date(r.ts).toLocaleString(locale, multiDay
@@ -596,58 +667,132 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
       )
     );
 
-    HISTORY_CHARTS.forEach((def, i) => {
-      const canvas = canvases[i]?.nativeElement;
-      if (!canvas) return;
+    this.activeFlagsChart?.destroy();
+    this.activeFlagsChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: this.i18n.t('controllerDetail.chartActiveFlags'),
+            data: history.readings.map((r) => r.activeFlags.length),
+            borderColor: lineColor,
+            backgroundColor: lineColor,
+            stepped: true,
+            pointRadius: 0,
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: inkMuted, maxTicksLimit: 6 } },
+          y: { beginAtZero: true, ticks: { color: inkMuted, precision: 0 }, grid: { color: gridColor } },
+        },
+      },
+    });
+  }
 
-      const title = def.titleKey ? this.i18n.t(def.titleKey) : def.key;
-      const chart = new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            {
-              label: title,
-              data: history.readings.map(def.extract),
-              borderColor: lineColor,
-              backgroundColor: lineColor,
-              stepped: true,
-              pointRadius: 0,
-              borderWidth: 2,
+  /**
+   * One horizontal swimlane per alarm flag active at some point in the
+   * period, one floating bar per active interval — replaces the old raw
+   * unitAlarmStatus1/2/shortAlarmStatus value charts (sections 24-27):
+   * multiple simultaneous alarms no longer overlap into an unreadable
+   * superposition of numbers, each segment shows exactly when that specific
+   * alarm was on, and colour follows the same orange/red criticality used
+   * everywhere else rather than a per-series palette.
+   */
+  private renderTimeline(): void {
+    const canvas = this.timelineCanvasRef?.nativeElement;
+    const rows = this.timelineRows();
+    if (!canvas || rows.length === 0) return;
+
+    const { gridColor, inkMuted, crit, warn } = this.chartTheme();
+    const lang = this.i18n.lang();
+    const locale = lang === 'fr' ? 'fr-CA' : 'en-US';
+    const { start: windowStart, end: windowEnd } = this.timelineWindow;
+    const multiDay = this.historyHours() > 24;
+    const fmt = (ms: number) =>
+      new Date(ms).toLocaleString(locale, multiDay
+        ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+        : { hour: '2-digit', minute: '2-digit' }
+      );
+    const durationLabel = (ms: number) => {
+      const minutes = Math.max(1, Math.round(ms / 60000));
+      if (minutes < 60) return `${minutes}min`;
+      const hours = Math.floor(minutes / 60);
+      const rest = minutes % 60;
+      return rest ? `${hours}h${rest}` : `${hours}h`;
+    };
+
+    const labels = rows.map((r) => translateAlarmLabel(r.flag, lang).split(' - ')[0]);
+
+    // One dataset per segment rather than one flat dataset for every segment:
+    // Chart.js's category axis resolves a bar's row by the *array position*
+    // of its data point, not by matching an object's `y` value — so packing
+    // every segment (many more than there are rows) into a single dataset's
+    // array made most of them line up with the wrong row, or no row at all.
+    // Each dataset here is padded with `null` everywhere except its own
+    // row's index, and `grouped: false` stops Chart.js dividing each row's
+    // width by however many datasets exist (which would squash every bar to
+    // a sliver) — every dataset instead independently claims the full row.
+    const datasets = rows.flatMap((row, i) =>
+      row.segments.map((s) => {
+        const data = new Array(rows.length).fill(null);
+        data[i] = [s.start, s.end];
+        return {
+          data,
+          backgroundColor: row.criticality === 'critical' ? crit : warn,
+          borderRadius: 4,
+          borderSkipped: false,
+          barPercentage: 0.55,
+          categoryPercentage: 0.7,
+          grouped: false,
+          meta: { start: s.start, end: s.end, ongoing: s.end >= windowEnd },
+        };
+      })
+    );
+
+    this.timelineChart?.destroy();
+    this.timelineChart = new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets: datasets as any },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => (items[0]?.label as string) ?? '',
+              label: (ctx) => {
+                const meta = (ctx.dataset as any).meta as { start: number; end: number; ongoing: boolean };
+                const range = `${fmt(meta.start)} → ${meta.ongoing ? this.i18n.t('controllerDetail.timelineOngoing') : fmt(meta.end)}`;
+                return [range, `${this.i18n.t('controllerDetail.timelineDuration')}: ${durationLabel(meta.end - meta.start)}`];
+              },
             },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: def.decode
-              ? {
-                  callbacks: {
-                    label: (ctx) => {
-                      const value = ctx.parsed.y;
-                      const flags = def.decode!(value, lang);
-                      return flags.length ? [`${valueLabel} : ${value}`, ...flags] : [`${valueLabel} : ${value} (${noAlarmLabel})`];
-                    },
-                  },
-                }
-              : undefined,
           },
-          scales: {
-            x: {
-              grid: { color: gridColor },
-              ticks: { color: inkMuted, maxTicksLimit: 6 },
-            },
-            y: {
-              beginAtZero: true,
-              ticks: { color: inkMuted, precision: 0 },
-              grid: { color: gridColor },
-            },
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            min: windowStart,
+            max: windowEnd,
+            grid: { color: gridColor },
+            ticks: { color: inkMuted, maxTicksLimit: 6, callback: (v) => fmt(Number(v)) },
+          },
+          y: {
+            type: 'category',
+            labels,
+            grid: { color: gridColor },
+            ticks: { color: inkMuted },
           },
         },
-      });
-      this.charts.push(chart);
+      },
     });
   }
 }

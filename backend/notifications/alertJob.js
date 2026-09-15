@@ -16,10 +16,16 @@ function worstCriticality(alarms) {
   return null;
 }
 
-/** A controller is worth alerting on its own if it has a critical alarm or is unreachable. */
+/**
+ * A controller is worth alerting on if it has any active alarm — orange
+ * (warning) or red (critical) — or is unreachable. Green (no alarm, reachable)
+ * never notifies. This is the single source of truth for "does this
+ * controller need an email", shared with the project-grouping pass below so
+ * the two can never drift apart.
+ */
 function isAffected(c) {
   const alarms = c.lastSnapshot?.alarms || [];
-  return alarms.some((a) => a.criticality === 'critical') || !c.status;
+  return alarms.length > 0 || !c.status;
 }
 
 async function isDue(controllerId, currentKey) {
@@ -64,8 +70,7 @@ async function runAlertSweep() {
   const byProject = new Map();
   for (const c of controllers) {
     if (!c.project) continue;
-    const hasIssue = (c.lastSnapshot?.alarms || []).length > 0 || !c.status;
-    if (!hasIssue) continue;
+    if (!isAffected(c)) continue;
     const key = c.project._id.toString();
     if (!byProject.has(key)) byProject.set(key, { project: c.project, controllers: [] });
     byProject.get(key).controllers.push(c);
@@ -90,7 +95,8 @@ async function runAlertSweep() {
 
     const generatedAt = new Date().toLocaleString('fr-FR');
     const { html, attachments } = buildAlertEmail({ projectName: project.nom, generatedAt, controllers: entries });
-    const subject = `[Orange Traffic] Alerte critique — ${project.nom}`;
+    const isCritical = entries.some((e) => e.worstCriticality === 'critical');
+    const subject = `[Orange Traffic] ${isCritical ? 'Alerte critique' : 'Alerte'} — ${project.nom}`;
 
     const results = await Promise.all(recipients.map((to) => mailer.send({ to, subject, html, attachments })));
     // At least one recipient must have actually received it before we record

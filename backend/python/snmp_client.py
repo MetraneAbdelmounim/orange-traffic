@@ -34,15 +34,24 @@ async def get_group(
     oids: Dict[str, str],
     timeout: float,
     retries: int,
-) -> Dict[str, Optional[object]]:
+) -> "tuple[Dict[str, Optional[object]], Optional[dict]]":
     """
     Reads a group of named OIDs from one controller.
 
-    Returns a dict keyed the same as `oids`, each value either the decoded
-    SNMP value (int for Integer/Counter/Gauge, str otherwise) or None if that
-    particular OID could not be read.
+    Returns `(results, failure)`. `results` is keyed the same as `oids`, each
+    value either the decoded SNMP value (int for Integer/Counter/Gauge, str
+    otherwise) or None if that particular OID could not be read. `failure` is
+    None if every OID in the group answered; otherwise it's the first failure
+    seen in the group as `{"reason": "timeout"|"snmp_error"|"network_error",
+    "detail": str}` — kept coarse (one representative failure per group, not
+    per OID) since this only feeds a human-readable diagnostic, not control
+    flow. `reason` lets the poller tell "device didn't answer in time" (worth
+    a soft retry before declaring the controller down) apart from "device
+    answered but rejected the request" (e.g. a stale community string —
+    retrying won't help, the config is wrong).
     """
     results: Dict[str, Optional[object]] = {key: None for key in oids}
+    failure: Optional[dict] = None
 
     dispatcher = SnmpDispatcher()
     try:
@@ -54,16 +63,29 @@ async def get_group(
                 error_indication, error_status, error_index, var_binds = await get_cmd(
                     dispatcher, community_data, target, ObjectType(ObjectIdentity(oid))
                 )
-                if error_indication or error_status:
+                if error_indication:
+                    if failure is None:
+                        # pysnmp's timeout indication is the RequestTimedOut
+                        # error class — no request ever got a reply. Anything
+                        # else (decoding, transport-level) is a distinct,
+                        # non-retryable-by-waiting network error.
+                        reason = "timeout" if type(error_indication).__name__ == "RequestTimedOut" else "network_error"
+                        failure = {"reason": reason, "detail": str(error_indication)}
+                    continue
+                if error_status:
+                    if failure is None:
+                        failure = {"reason": "snmp_error", "detail": str(error_status.prettyPrint())}
                     continue
                 for _, value in var_binds:
                     results[key] = _coerce(value)
             except Exception as exc:  # noqa: BLE001 - one bad OID must not sink the group
                 log.debug("SNMP GET failed for %s %s: %s", ip, oid, exc)
+                if failure is None:
+                    failure = {"reason": "network_error", "detail": str(exc)}
     finally:
         dispatcher.transport_dispatcher.close_dispatcher()
 
-    return results
+    return results, failure
 
 
 def _coerce(value):

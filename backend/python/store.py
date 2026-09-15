@@ -98,7 +98,16 @@ async def save_controller_poll(
     if reachable:
         update["lastSeenAt"] = now
 
-    await _db.controllers.update_one({"_id": controller_id}, {"$set": update})
+    # consecutiveFailures resets to 0 on any success, increments on failure —
+    # the raw signal the Node API derives a 3-tier communication state from
+    # (reachable / degraded / unreachable), see controllerController.js.
+    mongo_update = {"$set": update}
+    if reachable:
+        mongo_update["$set"]["consecutiveFailures"] = 0
+    else:
+        mongo_update["$inc"] = {"consecutiveFailures": 1}
+
+    await _db.controllers.update_one({"_id": controller_id}, mongo_update)
 
     await _db[READINGS].insert_one(
         {

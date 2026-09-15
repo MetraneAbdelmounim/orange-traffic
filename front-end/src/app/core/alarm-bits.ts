@@ -58,8 +58,18 @@ const ALL_TABLES = [UNIT_ALARM_STATUS_1_BITS, UNIT_ALARM_STATUS_2_BITS, SHORT_AL
 
 /** French label -> English label, built once from the tables above. */
 const FR_TO_EN = new Map<string, string>();
+/** French label -> criticality, built once from the tables above — an AlarmEvent only carries the label, not its tier. */
+const LABEL_TO_CRITICALITY = new Map<string, Criticality>();
 for (const table of ALL_TABLES) {
-  for (const bit of Object.values(table)) FR_TO_EN.set(bit.label, bit.labelEn);
+  for (const bit of Object.values(table)) {
+    FR_TO_EN.set(bit.label, bit.labelEn);
+    LABEL_TO_CRITICALITY.set(bit.label, bit.criticality);
+  }
+}
+
+/** Falls back to 'warning' for anything not in the table (defensive — should not happen for real alarm flags). */
+export function criticalityForLabel(label: string): Criticality {
+  return LABEL_TO_CRITICALITY.get(label) ?? 'warning';
 }
 
 /**

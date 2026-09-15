@@ -12,6 +12,8 @@ export interface ControllerSnapshot {
   reachable: boolean;
   measuredAt: string | null;
   error: string | null;
+  /** Coarse cause behind `error` — 'timeout' | 'snmp_error' | 'network_error' | null. */
+  errorReason: string | null;
   sysDescr: string | null;
   sysUpTimeTicks: number | null;
   unitAlarmStatus1: number | null;
@@ -53,6 +55,9 @@ export interface Controller {
   lastSeenAt: string | null;
   createdAt?: string;
   updatedAt?: string;
+  consecutiveFailures: number;
+  /** Derived server-side from status + consecutiveFailures — see controllerController.js's withCommunicationState. */
+  communicationState: 'reachable' | 'degraded' | 'unreachable';
   maintenanceMode: boolean;
   maintenance: MaintenanceInfo;
   /** Derived server-side: true only while acknowledgment.flagsSnapshot still matches the current alarm condition. */

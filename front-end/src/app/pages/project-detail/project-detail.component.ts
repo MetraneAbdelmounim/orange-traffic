@@ -207,9 +207,9 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
           @for (controller of controllers(); track controller._id) {
             <div
               class="card card-interactive card-accent p-5 flex flex-col gap-3 relative"
-              [class.is-crit]="!controller.maintenanceMode && controller.status && controller.lastSnapshot.activeFlags.length > 0"
-              [class.is-good]="!controller.maintenanceMode && controller.status && controller.lastSnapshot.activeFlags.length === 0"
-              [class.is-neutral]="!controller.maintenanceMode && !controller.status"
+              [class.is-crit]="!controller.maintenanceMode && (controller.communicationState === 'unreachable' || hasCriticalAlarm(controller))"
+              [class.is-warn]="!controller.maintenanceMode && controller.communicationState !== 'unreachable' && !hasCriticalAlarm(controller) && (controller.communicationState === 'degraded' || controller.lastSnapshot.activeFlags.length > 0)"
+              [class.is-good]="!controller.maintenanceMode && controller.communicationState === 'reachable' && controller.lastSnapshot.activeFlags.length === 0"
               [class.is-maintenance]="controller.maintenanceMode"
             >
               @if (auth.isAdmin()) {
@@ -242,7 +242,7 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
                     </div>
                   </div>
                 </div>
-                <app-signal-badge [snapshot]="controller.lastSnapshot" [reachable]="controller.status" [maintenance]="controller.maintenanceMode" />
+                <app-signal-badge [snapshot]="controller.lastSnapshot" [communicationState]="controller.communicationState" [maintenance]="controller.maintenanceMode" />
                 <p class="text-xs text-ink-muted">{{ controller.model }}</p>
               </a>
               <div class="flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
@@ -582,6 +582,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   hasCoords(c: Controller): boolean {
     return hasCoordinates(c);
+  }
+
+  hasCriticalAlarm(c: Controller): boolean {
+    return c.lastSnapshot.alarms.some((a) => a.criticality === 'critical');
   }
 
   streetViewLink(c: Controller): string {

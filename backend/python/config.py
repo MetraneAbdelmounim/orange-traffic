@@ -30,6 +30,17 @@ POLL_INTERVAL_SECONDS = _int("POLL_INTERVAL_SECONDS", 60)
 # Controllers read concurrently. Bounded so a large fleet does not open
 # hundreds of UDP sockets at once.
 POLL_CONCURRENCY = _int("POLL_CONCURRENCY", 16)
+# Hard ceiling on one controller's poll (all 4 OID groups, each with its own
+# SNMP_TIMEOUT x (SNMP_RETRIES+1) budget per OID). Without this, a single
+# pathological controller could — worst case — hold its semaphore slot for
+# minutes and delay the freshness of every other controller in the fleet, since
+# a sweep only completes once every controller's poll has settled.
+CONTROLLER_POLL_TIMEOUT = _float("CONTROLLER_POLL_TIMEOUT", 20.0)
+# A controller only flips to the "unreachable" (red) display state after this
+# many consecutive failed sweeps; a single failed sweep shows as "degraded"
+# (amber) instead. Absorbs an isolated dropped UDP packet without a false
+# "Unreachable" — a real outage is still caught within ~2 sweep intervals.
+DEGRADED_FAILURE_THRESHOLD = _int("DEGRADED_FAILURE_THRESHOLD", 1)
 
 READING_RETENTION_DAYS = _int("READING_RETENTION_DAYS", 90)
 
