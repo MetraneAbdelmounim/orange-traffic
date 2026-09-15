@@ -76,10 +76,15 @@ async def poll_now(ip: str):
     if controller is None:
         raise HTTPException(status_code=404, detail=f"Contrôleur inconnu : {ip}")
 
-    await poller.poll_now(controller)
+    # `success` here means "the controller actually answered", not just "this
+    # HTTP request didn't crash" — a timed-out poll is a legitimate, common
+    # outcome (a flaky link to the device), and the caller (the "Refresh now"
+    # button) needs to tell that apart from a real success to show the
+    # operator something more useful than silence.
+    reachable = await poller.poll_now(controller)
 
     fresh = await store.controller_status(controller["_id"])
-    return {"success": True, **fresh}
+    return {"success": reachable, **fresh}
 
 
 @app.exception_handler(HTTPException)

@@ -289,6 +289,7 @@ export const en: Record<TranslationKey, string> = {
   'controllerDetail.noteOptional': 'Note (optional)',
   'controllerDetail.actionFailed': 'Action failed',
   'controllerDetail.pollFailed': 'Poll failed — the controller did not respond in time',
+  'controllerDetail.pollUnreachable': 'Poll completed, but the controller did not answer — it remains unreachable from this server',
 
   'history.24h': '24 hours',
   'history.1w': '1 week',

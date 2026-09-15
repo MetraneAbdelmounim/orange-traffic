@@ -633,9 +633,17 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
     this.polling.set(true);
     this.pollError.set(null);
     this.controllerService.pollNow(this.controllerId).subscribe({
-      next: () => {
+      next: (result) => {
         this.load();
         this.polling.set(false);
+        // The request itself succeeding only means the poll ran, not that the
+        // device answered — `success` reflects whether it actually did.
+        // Without this check, a controller that's genuinely unreachable from
+        // this server looked identical to a working refresh: no error, just
+        // the same stale reading, which is exactly what was reported.
+        if (!result.success) {
+          this.pollError.set(this.i18n.t('controllerDetail.pollUnreachable'));
+        }
       },
       error: (err) => {
         this.polling.set(false);

@@ -75,14 +75,14 @@ class Poller:
         # return_exceptions keeps one failing controller from cancelling the sweep.
         await asyncio.gather(*(guarded(c) for c in controllers), return_exceptions=True)
 
-    async def poll_now(self, controller: dict) -> None:
-        """Re-reads one controller immediately, outside the scheduled sweep."""
-        await self._poll_controller(controller)
+    async def poll_now(self, controller: dict) -> bool:
+        """Re-reads one controller immediately, outside the scheduled sweep. Returns whether the device actually answered."""
+        return await self._poll_controller(controller)
 
-    async def _poll_controller(self, controller: dict) -> None:
+    async def _poll_controller(self, controller: dict) -> bool:
         ip = controller.get("ip")
         if not ip:
-            return
+            return False
 
         nom = controller.get("nom") or ip
         t0 = asyncio.get_running_loop().time()
@@ -111,6 +111,7 @@ class Poller:
             cleared_flags=cleared_flags,
         )
         log.debug("%s (%s): poll settled in %.2fs, reachable=%s", nom, ip, asyncio.get_running_loop().time() - t0, reachable)
+        return reachable
 
     async def _read_snapshot(self, controller: dict, ip: str) -> "tuple[dict, bool]":
         """Runs the 4 SNMP OID groups for one controller and builds its new snapshot."""

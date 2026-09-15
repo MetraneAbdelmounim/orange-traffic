@@ -287,6 +287,7 @@ export const fr = {
   'controllerDetail.noteOptional': 'Note (optionnelle)',
   'controllerDetail.actionFailed': 'Échec de l’action',
   'controllerDetail.pollFailed': 'Échec du sondage — le contrôleur n’a pas répondu à temps',
+  'controllerDetail.pollUnreachable': 'Sondage effectué, mais le contrôleur n’a pas répondu — il reste injoignable depuis ce serveur',
 
   'history.24h': '24 heures',
   'history.1w': '1 semaine',
