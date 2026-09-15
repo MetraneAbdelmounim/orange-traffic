@@ -165,6 +165,10 @@ function formatUptime(ticks: number | null, lang: Language): string {
           </div>
         </div>
 
+        @if (pollError()) {
+          <p class="chip chip-crit self-start"><span class="chip-dot"></span>{{ pollError() }}</p>
+        }
+
         @if (hasActiveIssue(c) || c.acknowledged || c.maintenanceMode || auth.isAdmin()) {
           <div class="card p-4 flex flex-wrap items-center gap-3">
             @if (c.acknowledged) {
@@ -227,6 +231,12 @@ function formatUptime(ticks: number | null, lang: Language): string {
             <span class="icon-badge tone-crit" [innerHTML]="icon.bell | safeHtml"></span>
             <h2 class="font-semibold text-ink">{{ 'controllerDetail.ntcipAlarms' | t }}</h2>
           </div>
+          @if (c.communicationState !== 'reachable' && c.lastSnapshot.alarms.length > 0) {
+            <p class="chip chip-warn mb-3 self-start">
+              <span class="chip-dot"></span>
+              {{ (c.communicationState === 'unreachable' ? 'controllerDetail.staleAlarmDataUnreachable' : 'controllerDetail.staleAlarmDataDegraded') | t: { at: formatDate(c.lastSnapshot.measuredAt) } }}
+            </p>
+          }
           @if (!c.lastSnapshot.alarms.length) {
             <p class="chip chip-good"><span class="chip-dot"></span>{{ 'controllerDetail.noActiveAlarm' | t }}</p>
           } @else {
@@ -394,6 +404,7 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
   timelineRows = signal<TimelineRow[]>([]);
   timelineHeight = computed(() => Math.max(80, this.timelineRows().length * this.TIMELINE_ROW_HEIGHT + 40));
   polling = signal(false);
+  pollError = signal<string | null>(null);
   page = signal(1);
   historyHours = signal(24);
   liveConnected = signal(true);
@@ -620,12 +631,16 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
 
   pollNow(): void {
     this.polling.set(true);
+    this.pollError.set(null);
     this.controllerService.pollNow(this.controllerId).subscribe({
       next: () => {
         this.load();
         this.polling.set(false);
       },
-      error: () => this.polling.set(false),
+      error: (err) => {
+        this.polling.set(false);
+        this.pollError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('controllerDetail.pollFailed'));
+      },
     });
   }
 

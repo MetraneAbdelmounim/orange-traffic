@@ -260,6 +260,8 @@ export const fr = {
   'controllerDetail.sinceLastRestart': 'Depuis le dernier redémarrage',
   'controllerDetail.ntcipAlarms': 'Alarmes NTCIP 1202',
   'controllerDetail.noActiveAlarm': 'Aucune alarme active',
+  'controllerDetail.staleAlarmDataUnreachable': 'Contrôleur injoignable — dernière donnée connue du {at}, peut-être obsolète',
+  'controllerDetail.staleAlarmDataDegraded': 'Communication dégradée — dernière donnée confirmée du {at}, en cours de revérification',
   'controllerDetail.detailedStatus': 'Statut détaillé (phases / détecteurs)',
   'controllerDetail.unconfirmedModel': 'non confirmé pour ce modèle',
   'controllerDetail.phases': 'Phases',
@@ -284,6 +286,7 @@ export const fr = {
   'controllerDetail.maintenanceActive': 'En maintenance depuis {at}',
   'controllerDetail.noteOptional': 'Note (optionnelle)',
   'controllerDetail.actionFailed': 'Échec de l’action',
+  'controllerDetail.pollFailed': 'Échec du sondage — le contrôleur n’a pas répondu à temps',
 
   'history.24h': '24 heures',
   'history.1w': '1 semaine',

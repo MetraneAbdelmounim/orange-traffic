@@ -262,6 +262,8 @@ export const en: Record<TranslationKey, string> = {
   'controllerDetail.sinceLastRestart': 'Since last restart',
   'controllerDetail.ntcipAlarms': 'NTCIP 1202 alarms',
   'controllerDetail.noActiveAlarm': 'No active alarm',
+  'controllerDetail.staleAlarmDataUnreachable': 'Controller unreachable — last known data from {at}, may be outdated',
+  'controllerDetail.staleAlarmDataDegraded': 'Degraded communication — last confirmed data from {at}, re-checking now',
   'controllerDetail.detailedStatus': 'Detailed status (phases / detectors)',
   'controllerDetail.unconfirmedModel': 'not confirmed for this model',
   'controllerDetail.phases': 'Phases',
@@ -286,6 +288,7 @@ export const en: Record<TranslationKey, string> = {
   'controllerDetail.maintenanceActive': 'Under maintenance since {at}',
   'controllerDetail.noteOptional': 'Note (optional)',
   'controllerDetail.actionFailed': 'Action failed',
+  'controllerDetail.pollFailed': 'Poll failed — the controller did not respond in time',
 
   'history.24h': '24 hours',
   'history.1w': '1 week',

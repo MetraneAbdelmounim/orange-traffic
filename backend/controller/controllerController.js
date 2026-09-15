@@ -8,7 +8,14 @@ const { accessibleProjectIds } = require('../middlewares/auth');
 const { flagsKey } = require('./flagsKey');
 
 const PY_BASE = `http://${config.HOST_PY}:${config.PORT_PY}`;
-const CONTROL_TIMEOUT_MS = Number(process.env.CONTROL_TIMEOUT_MS) || 15000;
+// Must stay comfortably above the Python poller's own CONTROLLER_POLL_TIMEOUT
+// hard cap (backend/python/config.py, 20s by default) — otherwise this proxy
+// call gives up and returns a 502 *before* a slow-but-eventually-successful
+// poll finishes on the Python side, which was invisible locally (low-latency
+// LAN to the bench unit finishes well under either timeout) but surfaced in
+// production as "poll now" silently doing nothing over a slower link to a
+// remote controller.
+const CONTROL_TIMEOUT_MS = Number(process.env.CONTROL_TIMEOUT_MS) || 25000;
 
 /** Fields a client may set on a controller. */
 const WRITABLE = ['ip', 'nom', 'port', 'community', 'model', 'latitude', 'longitude', 'project'];
