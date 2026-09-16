@@ -5,6 +5,7 @@ const mailer = require('./mailer');
 const { buildAlertEmail } = require('./emailTemplate');
 const { accessibleProjectIds } = require('../middlewares/auth');
 const { flagsKey } = require('../controller/flagsKey');
+const { APP_TIME_ZONE } = require('../config/timeZone');
 
 // 12h, matching projet-youness's default reminder interval — not exposed as
 // a setting since the brief doesn't ask for one.
@@ -93,7 +94,7 @@ async function runAlertSweep() {
       alarms: (c.lastSnapshot?.alarms || []).map((a) => ({ label: a.label, criticality: a.criticality })),
     }));
 
-    const generatedAt = new Date().toLocaleString('fr-FR');
+    const generatedAt = new Date().toLocaleString('fr-FR', { timeZone: APP_TIME_ZONE });
     const { html, attachments } = buildAlertEmail({ projectName: project.nom, generatedAt, controllers: entries });
     const isCritical = entries.some((e) => e.worstCriticality === 'critical');
     const subject = `[Orange Traffic] ${isCritical ? 'Alerte critique' : 'Alerte'} — ${project.nom}`;

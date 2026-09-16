@@ -259,6 +259,7 @@ export const fr = {
   'controllerDetail.snmpUptime': 'Uptime SNMP',
   'controllerDetail.sinceLastRestart': 'Depuis le dernier redémarrage',
   'controllerDetail.ntcipAlarms': 'Alarmes NTCIP 1202',
+  'controllerDetail.rawRegisters': 'Registres bruts (diagnostic)',
   'controllerDetail.noActiveAlarm': 'Aucune alarme active',
   'controllerDetail.staleAlarmDataUnreachable': 'Contrôleur injoignable — dernière donnée connue du {at}, peut-être obsolète',
   'controllerDetail.staleAlarmDataDegraded': 'Communication dégradée — dernière donnée confirmée du {at}, en cours de revérification',

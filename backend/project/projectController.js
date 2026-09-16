@@ -64,17 +64,23 @@ module.exports = {
               },
             },
           },
+          // Total *alarms*, not affected controllers — a single controller
+          // with 3 simultaneous conditions counts as 3 here, matching what
+          // the badge's label ("N en alarme") actually implies. Maintenance
+          // controllers are excluded, same "full suppression" rule as the
+          // other counts.
           alarmCount: {
-            $size: {
-              $filter: {
-                input: '$controllers',
-                as: 'c',
-                cond: {
-                  $and: [
-                    { $gt: [{ $size: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] } }, 0] },
-                    { $ne: ['$$c.maintenanceMode', true] },
-                  ],
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: '$controllers',
+                    as: 'c',
+                    cond: { $ne: ['$$c.maintenanceMode', true] },
+                  },
                 },
+                as: 'c',
+                in: { $size: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] } },
               },
             },
           },

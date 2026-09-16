@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { APP_TIME_ZONE } from '../../core/time-zone';
 import { Controller } from '../../models/controller';
 import { Project } from '../../models/project';
 import {
@@ -53,7 +54,7 @@ function drawInfoBlock(doc: jsPDF, controller: Controller, project: Project | nu
   ];
   const status: [string, string][] = [
     ['État de connexion', controller.status ? 'Joignable' : 'Injoignable'],
-    ['Dernière connexion', controller.lastSeenAt ? new Date(controller.lastSeenAt).toLocaleString('fr-CA') : '—'],
+    ['Dernière connexion', controller.lastSeenAt ? new Date(controller.lastSeenAt).toLocaleString('fr-CA', { timeZone: APP_TIME_ZONE }) : '—'],
     ['État général', controller.status && controller.lastSnapshot.activeFlags.length === 0 ? 'OK' : controller.status ? 'Alarme' : 'Hors ligne'],
     ['Période analysée', periodLabel],
     ['Rapport généré le', generatedAt],
@@ -204,7 +205,7 @@ export async function downloadSingleControllerReport(
   ]);
 
   const pName = projectName(project, controller);
-  const generatedAt = new Date().toLocaleString('fr-CA');
+  const generatedAt = new Date().toLocaleString('fr-CA', { timeZone: APP_TIME_ZONE });
   const header = () => drawBrandHeader(doc, PAGE.width, HEADER_HEIGHT, 'Rapport contrôleur', controller.nom, logoOT, logoIP);
 
   header();

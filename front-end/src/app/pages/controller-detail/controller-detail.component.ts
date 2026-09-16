@@ -7,6 +7,8 @@ import { Subscription, catchError, exhaustMap, of } from 'rxjs';
 import { AlarmEventService } from '../../core/services/alarm-event.service';
 import { criticalityForLabel, translateAlarmLabel } from '../../core/alarm-bits';
 import { refreshWhileVisible } from '../../core/auto-refresh';
+import { AppDatePipe } from '../../core/app-date.pipe';
+import { APP_TIME_ZONE } from '../../core/time-zone';
 import { AuthService } from '../../core/services/auth.service';
 import { ControllerService } from '../../core/services/controller.service';
 import { translateApiError } from '../../i18n/backend-errors';
@@ -136,7 +138,7 @@ function formatUptime(ticks: number | null, lang: Language): string {
 @Component({
   selector: 'app-controller-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, SignalBadgeComponent, StatTileComponent, SafeHtmlPipe, LiveIndicatorComponent, ModalComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, SignalBadgeComponent, StatTileComponent, SafeHtmlPipe, LiveIndicatorComponent, ModalComponent, TranslatePipe, AppDatePipe],
   template: `
     @if (controller(); as c) {
       <div class="max-w-6xl mx-auto px-4 py-8 flex flex-col gap-6">
@@ -213,7 +215,7 @@ function formatUptime(ticks: number | null, lang: Language): string {
         <div class="grid gap-4 sm:grid-cols-3">
           <app-stat-tile
             [label]="'controllerDetail.lastReading' | t"
-            [value]="(c.lastSnapshot.measuredAt | date: 'medium') || '—'"
+            [value]="(c.lastSnapshot.measuredAt | appDate) || '—'"
             [icon]="icon.clock"
             tone="brand"
           />
@@ -249,10 +251,20 @@ function formatUptime(ticks: number | null, lang: Language): string {
               }
             </ul>
           }
-          <div class="grid gap-3 sm:grid-cols-3 mt-4 text-xs text-ink-muted tnum">
-            <div>unitAlarmStatus1 = {{ c.lastSnapshot.unitAlarmStatus1 ?? '—' }}</div>
-            <div>unitAlarmStatus2 = {{ c.lastSnapshot.unitAlarmStatus2 ?? '—' }}</div>
-            <div>shortAlarmStatus = {{ c.lastSnapshot.shortAlarmStatus ?? '—' }}</div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mt-5 mb-2">{{ 'controllerDetail.rawRegisters' | t }}</p>
+          <div class="grid gap-3 sm:grid-cols-3">
+            <div class="rounded-lg bg-sunken px-3 py-2.5">
+              <p class="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-muted font-mono">unitAlarmStatus1</p>
+              <p class="mt-0.5 text-lg font-bold tnum text-ink">{{ c.lastSnapshot.unitAlarmStatus1 ?? '—' }}</p>
+            </div>
+            <div class="rounded-lg bg-sunken px-3 py-2.5">
+              <p class="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-muted font-mono">unitAlarmStatus2</p>
+              <p class="mt-0.5 text-lg font-bold tnum text-ink">{{ c.lastSnapshot.unitAlarmStatus2 ?? '—' }}</p>
+            </div>
+            <div class="rounded-lg bg-sunken px-3 py-2.5">
+              <p class="text-[0.65rem] font-semibold uppercase tracking-wide text-ink-muted font-mono">shortAlarmStatus</p>
+              <p class="mt-0.5 text-lg font-bold tnum text-ink">{{ c.lastSnapshot.shortAlarmStatus ?? '—' }}</p>
+            </div>
           </div>
         </div>
 
@@ -266,18 +278,28 @@ function formatUptime(ticks: number | null, lang: Language): string {
             <div class="grid gap-4 sm:grid-cols-2 text-sm">
               @if (c.lastSnapshot.phaseStatus) {
                 <div>
-                  <p class="text-xs text-ink-muted mb-1">{{ 'controllerDetail.phases' | t }}</p>
-                  @for (kv of objectEntries(c.lastSnapshot.phaseStatus); track kv[0]) {
-                    <p class="tnum">{{ kv[0] }} = {{ kv[1] }}</p>
-                  }
+                  <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">{{ 'controllerDetail.phases' | t }}</p>
+                  <div class="rounded-lg bg-sunken overflow-hidden">
+                    @for (kv of objectEntries(c.lastSnapshot.phaseStatus); track kv[0]) {
+                      <div class="list-row flex items-center justify-between gap-3 px-3 py-2 last:border-b-0">
+                        <span class="font-mono text-xs text-ink-muted">{{ kv[0] }}</span>
+                        <span class="font-semibold tnum text-ink">{{ kv[1] }}</span>
+                      </div>
+                    }
+                  </div>
                 </div>
               }
               @if (c.lastSnapshot.detectorStatus) {
                 <div>
-                  <p class="text-xs text-ink-muted mb-1">{{ 'controllerDetail.detectors' | t }}</p>
-                  @for (kv of objectEntries(c.lastSnapshot.detectorStatus); track kv[0]) {
-                    <p class="tnum">{{ kv[0] }} = {{ kv[1] }}</p>
-                  }
+                  <p class="text-xs font-semibold uppercase tracking-wide text-ink-muted mb-2">{{ 'controllerDetail.detectors' | t }}</p>
+                  <div class="rounded-lg bg-sunken overflow-hidden">
+                    @for (kv of objectEntries(c.lastSnapshot.detectorStatus); track kv[0]) {
+                      <div class="list-row flex items-center justify-between gap-3 px-3 py-2 last:border-b-0">
+                        <span class="font-mono text-xs text-ink-muted">{{ kv[0] }}</span>
+                        <span class="font-semibold tnum text-ink">{{ kv[1] }}</span>
+                      </div>
+                    }
+                  </div>
                 </div>
               }
             </div>
@@ -327,14 +349,14 @@ function formatUptime(ticks: number | null, lang: Language): string {
           } @else {
             <ul class="flex flex-col">
               @for (event of pagedEvents(); track event._id) {
-                <li class="table-row py-2 flex items-center justify-between gap-3 text-sm">
+                <li class="list-row py-2 flex items-center justify-between gap-3 text-sm">
                   <span class="flex items-center gap-2">
                     <span class="chip" [class.chip-crit]="event.state === 'active'" [class.chip-good]="event.state === 'cleared'">
                       <span class="chip-dot"></span>{{ (event.state === 'active' ? 'controllerDetail.appeared' : 'controllerDetail.cleared') | t }}
                     </span>
                     {{ translatedAlarmLabel(event.flag) }}
                   </span>
-                  <span class="text-ink-muted tnum">{{ event.occurredAt | date: 'medium' }}</span>
+                  <span class="text-ink-muted tnum">{{ event.occurredAt | appDate }}</span>
                 </li>
               }
             </ul>
@@ -521,7 +543,7 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
   formatDate(iso: string | null): string {
     if (!iso) return '—';
     const locale = this.i18n.lang() === 'fr' ? 'fr-CA' : 'en-US';
-    return new Date(iso).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
+    return new Date(iso).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: APP_TIME_ZONE });
   }
 
   confirmAcknowledge(): void {
@@ -685,8 +707,8 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
     const multiDay = this.historyHours() > 24;
     const labels = history.readings.map((r) =>
       new Date(r.ts).toLocaleString(locale, multiDay
-        ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
-        : { hour: '2-digit', minute: '2-digit' }
+        ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: APP_TIME_ZONE }
+        : { hour: '2-digit', minute: '2-digit', timeZone: APP_TIME_ZONE }
       )
     );
 
@@ -740,8 +762,8 @@ export class ControllerDetailComponent implements OnInit, AfterViewInit, OnDestr
     const multiDay = this.historyHours() > 24;
     const fmt = (ms: number) =>
       new Date(ms).toLocaleString(locale, multiDay
-        ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
-        : { hour: '2-digit', minute: '2-digit' }
+        ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: APP_TIME_ZONE }
+        : { hour: '2-digit', minute: '2-digit', timeZone: APP_TIME_ZONE }
       );
     const durationLabel = (ms: number) => {
       const minutes = Math.max(1, Math.round(ms / 60000));

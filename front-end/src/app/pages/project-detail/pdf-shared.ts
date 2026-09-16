@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { APP_TIME_ZONE } from '../../core/time-zone';
 import { AlarmDetail, Controller } from '../../models/controller';
 
 /**
@@ -89,8 +90,8 @@ export async function loadImageWithRatio(url: string): Promise<LogoInfo> {
 
 export function formatDateCompact(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
-  const datePart = date.toLocaleDateString('fr-CA');
-  const timePart = date.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+  const datePart = date.toLocaleDateString('fr-CA', { timeZone: APP_TIME_ZONE });
+  const timePart = date.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: APP_TIME_ZONE });
   return `${datePart}\n${timePart}`;
 }
 

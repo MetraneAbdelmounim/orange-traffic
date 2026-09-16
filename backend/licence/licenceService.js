@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Licence = require('./licence');
 const licenceCrypto = require('./licenceCrypto');
+const { APP_TIME_ZONE } = require('../config/timeZone');
 
 const DEMO_DAYS = 10;
 
@@ -77,7 +78,7 @@ async function install(rawDocument, installedBy) {
   if (daysRemaining <= 0) {
     return {
       ok: false,
-      reason: `Cette licence a expiré le ${new Date(payload.expiresAt).toLocaleDateString('fr-FR')}`,
+      reason: `Cette licence a expiré le ${new Date(payload.expiresAt).toLocaleDateString('fr-FR', { timeZone: APP_TIME_ZONE })}`,
     };
   }
 

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable, { CellHookData } from 'jspdf-autotable';
+import { APP_TIME_ZONE } from '../../core/time-zone';
 import { Controller } from '../../models/controller';
 import { Project } from '../../models/project';
 import {
@@ -123,7 +124,7 @@ function drawControllerDetail(
     ['Coordonnées', coord(controller)],
     ['sysDescr', (controller.lastSnapshot.sysDescr || '—').slice(0, 42)],
     ['Statut connexion', controller.status ? 'Joignable' : 'Injoignable'],
-    ['Dernière communication', controller.lastSeenAt ? new Date(controller.lastSeenAt).toLocaleString('fr-CA') : '—'],
+    ['Dernière communication', controller.lastSeenAt ? new Date(controller.lastSeenAt).toLocaleString('fr-CA', { timeZone: APP_TIME_ZONE }) : '—'],
   ];
   const rawFields: [string, string][] = [
     ['unitAlarmStatus1', String(controller.lastSnapshot.unitAlarmStatus1 ?? '—')],
@@ -208,7 +209,7 @@ export async function downloadControllerReport(project: Project | null, controll
   ]);
 
   const projectName = project?.nom || 'Projet';
-  const generatedAt = new Date().toLocaleString('fr-CA');
+  const generatedAt = new Date().toLocaleString('fr-CA', { timeZone: APP_TIME_ZONE });
 
   const counts = {
     total: controllers.length,

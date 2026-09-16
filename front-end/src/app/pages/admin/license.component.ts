@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { AppDatePipe } from '../../core/app-date.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { LicenceService } from '../../core/services/licence.service';
 import { translateApiError } from '../../i18n/backend-errors';
@@ -19,7 +20,7 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
 @Component({
   selector: 'app-license',
   standalone: true,
-  imports: [CommonModule, PageHeaderComponent, TranslatePipe],
+  imports: [CommonModule, PageHeaderComponent, TranslatePipe, AppDatePipe],
   template: `
     <div class="max-w-2xl mx-auto px-4 py-8">
       <app-page-header [title]="'nav.license' | t" [subtitle]="'license.subtitle' | t" [icon]="licenseIcon" />
@@ -44,7 +45,7 @@ const LICENSE_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" str
               <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p class="text-xs text-ink-muted">{{ 'license.expiresOn' | t }}</p>
-                  <p class="font-medium text-ink">{{ s.expiresAt | date: 'dd/MM/yyyy' }}</p>
+                  <p class="font-medium text-ink">{{ s.expiresAt | appDate: 'date' }}</p>
                 </div>
                 <div>
                   <p class="text-xs text-ink-muted">{{ 'license.daysRemaining' | t }}</p>

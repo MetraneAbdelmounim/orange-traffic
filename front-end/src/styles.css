@@ -350,11 +350,16 @@ button {
   .link-chip:hover { opacity: 0.8; }
   .link-chip svg { flex: none; }
 
-  .table-row {
+  /* Named "list-row", not "table-row" — Tailwind itself ships a `table-row`
+     utility (display: table-row) that silently wins over a same-named custom
+     class on any non-<tr> element, breaking `flex` layout on it (the row's
+     content collapses with no gap since `justify-content` has no effect
+     outside a flex/grid box). */
+  .list-row {
     border-bottom: 1px solid var(--line);
     transition: background-color 120ms ease;
   }
-  .table-row:hover {
+  .list-row:hover {
     background-color: var(--surface-hover);
   }
 

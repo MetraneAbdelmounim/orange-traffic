@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { APP_TIME_ZONE } = require('../config/timeZone');
 
 // Same assets the built SPA serves — no duplicate copies to keep in sync.
 const ASSETS_ROOT = path.join(__dirname, '../public/browser/assets');
@@ -44,7 +45,7 @@ function controllerBlock(c) {
       </tr>
       <tr>
         <td style="padding:12px 16px;font-size:13px;color:#20191d;">
-          <p style="margin:0 0 4px;color:#75696b;">IP&nbsp;: <span style="font-family:monospace;">${escapeHtml(c.ip)}</span> &middot; Dernière connexion&nbsp;: ${c.lastSeenAt ? new Date(c.lastSeenAt).toLocaleString('fr-FR') : '—'}</p>
+          <p style="margin:0 0 4px;color:#75696b;">IP&nbsp;: <span style="font-family:monospace;">${escapeHtml(c.ip)}</span> &middot; Dernière connexion&nbsp;: ${c.lastSeenAt ? new Date(c.lastSeenAt).toLocaleString('fr-FR', { timeZone: APP_TIME_ZONE }) : '—'}</p>
           <p style="margin:8px 0 0;font-weight:600;">Alarmes actives</p>
           ${alarmsHtml}
         </td>

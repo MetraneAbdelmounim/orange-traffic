@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { AppDatePipe } from '../../core/app-date.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { LicenceService } from '../../core/services/licence.service';
 import { MemberService } from '../../core/services/member.service';
@@ -42,7 +43,7 @@ const STEPS: Step[] = ['welcome', 'admin', 'licence', 'smtp', 'notifications', '
 @Component({
   selector: 'app-setup',
   standalone: true,
-  imports: [CommonModule, FormsModule, BrandLogoComponent, LanguageToggleComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, BrandLogoComponent, LanguageToggleComponent, TranslatePipe, AppDatePipe],
   template: `
     <div class="setup-shell">
       <div class="setup-card card">
@@ -100,7 +101,7 @@ const STEPS: Step[] = ['welcome', 'admin', 'licence', 'smtp', 'notifications', '
                 <div class="mt-6 rounded-lg bg-sunken p-4 text-sm">
                   <p class="flex justify-between py-1"><span class="text-ink-muted">{{ 'nav.license' | t }}</span><span class="font-semibold text-ink">{{ 'license.demo' | t }}</span></p>
                   <p class="flex justify-between py-1"><span class="text-ink-muted">{{ 'license.status' | t }}</span><span class="chip chip-good"><span class="chip-dot"></span>{{ 'license.active' | t }}</span></p>
-                  <p class="flex justify-between py-1"><span class="text-ink-muted">{{ 'license.expiresOn' | t }}</span><span class="font-semibold text-ink">{{ l.expiresAt | date: 'dd/MM/yyyy' }}</span></p>
+                  <p class="flex justify-between py-1"><span class="text-ink-muted">{{ 'license.expiresOn' | t }}</span><span class="font-semibold text-ink">{{ l.expiresAt | appDate: 'date' }}</span></p>
                   <p class="flex justify-between py-1"><span class="text-ink-muted">{{ 'license.daysRemaining' | t }}</span><span class="font-semibold text-ink">{{ l.daysRemaining }}</span></p>
                 </div>
                 <div class="mt-6 flex justify-end">

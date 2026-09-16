@@ -261,6 +261,7 @@ export const en: Record<TranslationKey, string> = {
   'controllerDetail.snmpUptime': 'SNMP uptime',
   'controllerDetail.sinceLastRestart': 'Since last restart',
   'controllerDetail.ntcipAlarms': 'NTCIP 1202 alarms',
+  'controllerDetail.rawRegisters': 'Raw registers (diagnostic)',
   'controllerDetail.noActiveAlarm': 'No active alarm',
   'controllerDetail.staleAlarmDataUnreachable': 'Controller unreachable — last known data from {at}, may be outdated',
   'controllerDetail.staleAlarmDataDegraded': 'Degraded communication — last confirmed data from {at}, re-checking now',

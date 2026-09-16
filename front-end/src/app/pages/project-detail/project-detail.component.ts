@@ -164,7 +164,7 @@ const EMPTY_FORM: FormState = { nom: '', ip: '', port: 161, community: 'public',
                   </thead>
                   <tbody>
                     @for (row of k.controllers; track row.controllerId) {
-                      <tr class="table-row">
+                      <tr class="list-row">
                         <td class="py-2">
                           {{ row.nom }}
                           @if (row.maintenanceMode) {

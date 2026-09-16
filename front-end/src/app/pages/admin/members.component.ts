@@ -47,7 +47,7 @@ type FormState = { username: string; isAdmin: boolean; projects: string[]; email
             </thead>
             <tbody>
               @for (member of members(); track member._id) {
-                <tr class="table-row">
+                <tr class="list-row">
                   <td class="px-5 py-3.5">
                     <div class="flex items-center gap-3">
                       <span class="avatar-initials">{{ initials(member.username) }}</span>
