@@ -8,15 +8,23 @@ import { translateApiError } from '../../i18n/backend-errors';
 import { I18nService } from '../../i18n/i18n.service';
 import { TranslatePipe } from '../../i18n/translate.pipe';
 import { LicenceStatus } from '../../models/licence';
-import { SettingsUpdate } from '../../models/settings';
+import { ClearHistoryResult, SettingsUpdate } from '../../models/settings';
+import { ModalComponent } from '../../ui/modal.component';
 import { PageHeaderComponent } from '../../ui/page-header.component';
 
 const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`;
+const RETENTION_PRESETS: { days: number; labelKey: 'settings.retention7d' | 'settings.retention30d' | 'settings.retention90d' | 'settings.retention180d' | 'settings.retention365d' }[] = [
+  { days: 7, labelKey: 'settings.retention7d' },
+  { days: 30, labelKey: 'settings.retention30d' },
+  { days: 90, labelKey: 'settings.retention90d' },
+  { days: 180, labelKey: 'settings.retention180d' },
+  { days: 365, labelKey: 'settings.retention365d' },
+];
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, PageHeaderComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, RouterLink, PageHeaderComponent, ModalComponent, TranslatePipe],
   template: `
     <div class="max-w-5xl mx-auto px-4 py-8">
       <app-page-header [title]="'nav.settings' | t" [subtitle]="'settings.subtitle' | t" [icon]="settingsIcon" />
@@ -47,6 +55,42 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
               <div class="flex justify-end">
                 <button type="button" class="btn btn-primary" (click)="saveGeneral()" [disabled]="saving()">{{ 'common.save' | t }}</button>
               </div>
+            </div>
+          </section>
+
+          <!-- Data retention -->
+          <section class="card p-6">
+            <header class="mb-4">
+              <h2 class="text-sm font-semibold text-ink">{{ 'settings.retentionTitle' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.retentionHint' | t }}</p>
+            </header>
+            <div class="flex flex-col gap-4">
+              <div class="flex flex-wrap gap-2">
+                @for (preset of retentionPresets; track preset.days) {
+                  <button
+                    type="button"
+                    class="btn"
+                    [class.btn-primary]="form.historyRetentionDays === preset.days"
+                    [class.btn-ghost]="form.historyRetentionDays !== preset.days"
+                    (click)="form.historyRetentionDays = preset.days"
+                  >
+                    {{ preset.labelKey | t }}
+                  </button>
+                }
+              </div>
+              <div>
+                <label class="label" for="historyRetentionDays">{{ 'settings.retentionCustom' | t }}</label>
+                <input id="historyRetentionDays" type="number" min="1" class="field max-w-[10rem]" [(ngModel)]="form.historyRetentionDays" name="historyRetentionDays" />
+              </div>
+              <div class="flex justify-between items-center gap-3">
+                <button type="button" class="btn btn-ghost" (click)="confirmingClear.set(true)" [disabled]="clearing()">
+                  {{ 'settings.clearNow' | t }}
+                </button>
+                <button type="button" class="btn btn-primary" (click)="saveRetention()" [disabled]="saving()">{{ 'common.save' | t }}</button>
+              </div>
+              @if (clearResult(); as r) {
+                <p class="chip chip-good self-start"><span class="chip-dot"></span>{{ 'settings.clearNowResult' | t: { readings: r.readingsDeleted, events: r.eventsDeleted } }}</p>
+              }
             </div>
           </section>
 
@@ -151,6 +195,19 @@ const SETTINGS_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" st
         </div>
       }
     </div>
+
+    <!-- Clear history confirmation -->
+    <app-modal [open]="confirmingClear()" [title]="'settings.clearConfirmTitle' | t" size="sm" (closed)="confirmingClear.set(false)">
+      <p class="text-sm text-ink-secondary">
+        {{ 'settings.clearConfirmBody' | t: { days: form.historyRetentionDays ?? 90 } }} {{ 'common.irreversible' | t }}
+      </p>
+      <ng-container modalFooter>
+        <button type="button" class="btn btn-ghost" (click)="confirmingClear.set(false)">{{ 'common.cancel' | t }}</button>
+        <button type="button" class="btn btn-danger" [disabled]="clearing()" (click)="clearHistoryNow()">
+          {{ (clearing() ? 'common.loading' : 'settings.clearNow') | t }}
+        </button>
+      </ng-container>
+    </app-modal>
   `,
 })
 export class SettingsComponent implements OnInit {
@@ -159,16 +216,21 @@ export class SettingsComponent implements OnInit {
   private i18n = inject(I18nService);
 
   settingsIcon = SETTINGS_ICON;
+  retentionPresets = RETENTION_PRESETS;
   loading = signal(true);
   saving = signal(false);
   testing = signal(false);
   testTo = '';
   testResult = signal<{ ok: boolean; message: string } | null>(null);
   licence = signal<LicenceStatus | null>(null);
+  confirmingClear = signal(false);
+  clearing = signal(false);
+  clearResult = signal<ClearHistoryResult | null>(null);
 
   form: SettingsUpdate & { smtpPassSet?: boolean } = {
     pollIntervalSeconds: 60,
     defaultSnmpCommunity: 'public',
+    historyRetentionDays: 90,
     smtpHost: '',
     smtpPort: 587,
     smtpSecure: false,
@@ -202,6 +264,26 @@ export class SettingsComponent implements OnInit {
       });
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async saveRetention(): Promise<void> {
+    this.saving.set(true);
+    try {
+      await this.settingsService.update({ historyRetentionDays: this.form.historyRetentionDays });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  async clearHistoryNow(): Promise<void> {
+    this.clearing.set(true);
+    try {
+      const result = await this.settingsService.clearHistoryNow();
+      this.clearResult.set(result);
+      this.confirmingClear.set(false);
+    } finally {
+      this.clearing.set(false);
     }
   }
 

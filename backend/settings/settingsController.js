@@ -1,10 +1,12 @@
 const Settings = require('./settings');
 const asyncHandler = require('../middlewares/asyncHandler');
 const mailer = require('../notifications/mailer');
+const retention = require('../controller/retention');
 
 const WRITABLE = [
   'pollIntervalSeconds',
   'defaultSnmpCommunity',
+  'historyRetentionDays',
   'smtpHost',
   'smtpPort',
   'smtpSecure',
@@ -41,7 +43,23 @@ module.exports = {
       { $set: update },
       { new: true, upsert: true, runValidators: true }
     );
+
+    if (update.historyRetentionDays !== undefined) {
+      await retention.applyRetentionSetting(settings.historyRetentionDays);
+    }
+
     return res.status(200).json(settings);
+  }),
+
+  /**
+   * Applies the currently configured retention period right now, instead of
+   * waiting for MongoDB's TTL sweep — deletes readings/alarm events older
+   * than `historyRetentionDays`, it does not wipe everything.
+   */
+  clearHistoryNow: asyncHandler(async (_req, res) => {
+    const settings = await Settings.load();
+    const result = await retention.clearHistoryNow(settings.historyRetentionDays);
+    return res.status(200).json(result);
   }),
 
   /**

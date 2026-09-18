@@ -21,5 +21,6 @@ const testMailLimiter = rateLimit({
 router.get('', settingsController.getSettings);
 router.put('', settingsController.updateSettings);
 router.post('/test-mail', testMailLimiter, settingsController.testMail);
+router.post('/clear-history', settingsController.clearHistoryNow);
 
 module.exports = router;

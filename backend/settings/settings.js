@@ -11,6 +11,12 @@ const settingsSchema = mongoose.Schema(
     pollIntervalSeconds: { type: Number, default: () => config.pollIntervalSeconds },
     defaultSnmpCommunity: { type: String, default: () => config.defaultSnmpCommunity },
 
+    // How long history (readings for the charts) and the alarm journal are
+    // kept before MongoDB's TTL sweep deletes them automatically — see
+    // controller/retention.js, which keeps the DB's actual TTL in sync
+    // whenever this changes.
+    historyRetentionDays: { type: Number, default: 90 },
+
     smtpHost: { type: String, default: '' },
     smtpPort: { type: Number, default: 587 },
     smtpSecure: { type: Boolean, default: false },

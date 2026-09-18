@@ -112,6 +112,12 @@ if (require.main === module) {
     .connect(config.bdUrl)
     .then(async () => {
       console.log('Connected to the database');
+      const Settings = require('./settings/settings');
+      const { applyRetentionSetting } = require('./controller/retention');
+      const settings = await Settings.load();
+      await applyRetentionSetting(settings.historyRetentionDays).catch((err) =>
+        console.error('Retention sync failed:', err.message)
+      );
       require('./notifications/scheduler').start();
       app.listen(config.PORT, () => {
         console.log(`Server running at http://${config.HOST}:${config.PORT}`);

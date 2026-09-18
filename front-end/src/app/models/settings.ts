@@ -1,6 +1,7 @@
 export interface AppSettings {
   pollIntervalSeconds: number;
   defaultSnmpCommunity: string;
+  historyRetentionDays: number;
   smtpHost: string;
   smtpPort: number;
   smtpSecure: boolean;
@@ -17,4 +18,10 @@ export interface TestMailResult {
   ok: boolean;
   stage: 'connexion' | 'envoi';
   message: string;
+}
+
+export interface ClearHistoryResult {
+  readingsDeleted: number;
+  eventsDeleted: number;
+  cutoff: string;
 }

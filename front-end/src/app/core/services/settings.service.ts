@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { AppSettings, SettingsUpdate, TestMailResult } from '../../models/settings';
+import { AppSettings, ClearHistoryResult, SettingsUpdate, TestMailResult } from '../../models/settings';
 
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
@@ -18,5 +18,10 @@ export class SettingsService {
   /** Tests a candidate config without necessarily having saved it first. */
   testMail(data: SettingsUpdate & { to?: string }): Promise<TestMailResult> {
     return firstValueFrom(this.http.post<TestMailResult>('/api/settings/test-mail', data));
+  }
+
+  /** Applies the currently saved retention period right now instead of waiting for it to expire on its own. */
+  clearHistoryNow(): Promise<ClearHistoryResult> {
+    return firstValueFrom(this.http.post<ClearHistoryResult>('/api/settings/clear-history', {}));
   }
 }
