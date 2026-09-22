@@ -43,11 +43,6 @@ module.exports = {
   // Python SNMP polling service
   PORT_PY: Number(process.env.PORT_PY) || 8000,
   HOST_PY: process.env.HOST_PY || (isProduction ? 'poller' : '127.0.0.1'),
-  // Required once the poller runs with `network_mode: host` in production —
-  // its control API then binds to the host's real network interfaces
-  // instead of staying isolated on Docker's private bridge network, so this
-  // stops an unauthenticated caller on the LAN from triggering polls.
-  pollerSharedSecret: required('POLLER_SHARED_SECRET', 'dev-only-insecure-poller-secret'),
 
   // Origins allowed to call the API. Same-origin deployments need none.
   corsOrigins: list('CORS_ORIGINS', isProduction ? [] : ['http://localhost:4200']),

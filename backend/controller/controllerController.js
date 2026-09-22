@@ -206,7 +206,7 @@ module.exports = {
       const { data } = await axios.post(
         `${PY_BASE}/control/poll/${controller.ip}`,
         {},
-        { timeout: CONTROL_TIMEOUT_MS, headers: { 'X-Poller-Token': config.pollerSharedSecret } }
+        { timeout: CONTROL_TIMEOUT_MS }
       );
       return res.status(200).json(data);
     } catch (err) {
