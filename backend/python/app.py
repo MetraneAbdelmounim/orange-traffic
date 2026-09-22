@@ -13,10 +13,12 @@ straight from MongoDB, so a page render never touches a controller.
 
 import asyncio
 import logging
+import secrets
 import sys
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 import config
@@ -53,6 +55,15 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Orange Traffic SNMP poller", version="1.0.0", lifespan=lifespan)
 
 
+def require_poller_token(x_poller_token: Optional[str] = Header(default=None)):
+    if (
+        not config.POLLER_SHARED_SECRET
+        or not x_poller_token
+        or not secrets.compare_digest(x_poller_token, config.POLLER_SHARED_SECRET)
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 @app.get("/health")
 async def health():
     return {
@@ -63,7 +74,7 @@ async def health():
     }
 
 
-@app.post("/control/poll/{ip}")
+@app.post("/control/poll/{ip}", dependencies=[Depends(require_poller_token)])
 async def poll_now(ip: str):
     """
     Re-reads one controller on demand and returns its fresh status.

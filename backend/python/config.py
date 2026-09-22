@@ -19,6 +19,18 @@ def _float(name: str, default: float) -> float:
 
 IS_PRODUCTION = os.environ.get("NODE_ENV") == "production"
 
+# Checked against the `X-Poller-Token` header on /control/poll — required once
+# this service runs with `network_mode: host` in production, since its API
+# then binds to the host's real network interfaces instead of staying
+# isolated on Docker's private bridge network. Same required-in-production,
+# dev-fallback-otherwise pattern as `required()` in backend/config/config.js
+# — the fallback string must stay identical to the one there, since a local
+# dev poller and a local dev Node API need to agree on it without either
+# side needing a .env entry.
+if IS_PRODUCTION and not os.environ.get("POLLER_SHARED_SECRET"):
+    raise RuntimeError("Missing required environment variable POLLER_SHARED_SECRET. See backend/.env.example.")
+POLLER_SHARED_SECRET = os.environ.get("POLLER_SHARED_SECRET") or "dev-only-insecure-poller-secret"
+
 MONGO_URL = os.environ.get(
     "MONGO_URL",
     "mongodb://mongo:27017/orangetraffic" if IS_PRODUCTION else "mongodb://127.0.0.1:27017/orangetraffic",

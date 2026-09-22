@@ -17,6 +17,12 @@ services:
     image: mongo:7
     container_name: orange-traffic-mongo
     restart: always
+    # Loopback-only — needed so the poller (network_mode: host, below) can
+    # still reach Mongo by IP once it no longer shares Docker's bridge
+    # network. Binding to 127.0.0.1 keeps this off the VPS's real network
+    # interfaces; do not change this to a bare port or "0.0.0.0:...".
+    ports:
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -36,7 +42,10 @@ services:
       NODE_ENV: production
       MONGO_URL: mongodb://mongo:27017/orangetraffic
       TZ: America/Toronto
-      HOST_PY: poller
+      # The poller runs with network_mode: host (below), so it no longer has
+      # a "poller" DNS name on this app's bridge network — reach it via
+      # Docker Desktop's host alias instead.
+      HOST_PY: host.docker.internal
       PORT_PY: 8000
     depends_on:
       mongo:
@@ -54,9 +63,18 @@ services:
       context: ..
       dockerfile: backend/python/Dockerfile
     env_file: .env
+    # Shares the WSL2 VM's own network stack directly instead of Docker's
+    # private bridge — with WSL2 mirrored networking already enabled
+    # (.wslconfig), this puts outbound SNMP traffic straight onto the host's
+    # real interfaces with no extra Docker-level NAT hop in between. Requires
+    # "Enable host networking" turned on once in Docker Desktop's Settings →
+    # Resources → Network. See DEPLOYMENT.md for the full rationale and the
+    # tradeoffs this brings (loses the "poller" DNS name, exposes :8000 on
+    # the host — mitigated by the X-Poller-Token check in app.py).
+    network_mode: host
     environment:
       NODE_ENV: production
-      MONGO_URL: mongodb://mongo:27017/orangetraffic
+      MONGO_URL: mongodb://127.0.0.1:27017/orangetraffic
       TZ: America/Toronto
     depends_on:
       mongo:

@@ -9,10 +9,54 @@ les ports **publiés sur l'hôte** peuvent entrer en conflit.
 
 project-youness publie déjà `80` et `443` (son service `proxy`). Orange
 Traffic utilise donc **`18080`/`18443`** à la place — voir
-`backend/docker-compose.yml`. Rien d'autre ne se recoupe : Mongo, l'API Node
-et le poller Python de chaque app restent internes à leur propre réseau
-Docker (jamais publiés sur l'hôte), donc réutiliser les mêmes ports internes
-(5000, 8000, 27017) d'une app à l'autre est sans risque.
+`backend/docker-compose.yml`. L'API Node de chaque app reste interne à son
+propre réseau Docker (jamais publiée sur l'hôte).
+
+**Exception depuis le passage du poller en `network_mode: host`** (voir
+« Pourquoi le poller tourne en réseau hôte » ci-dessous) : `27017` (Mongo,
+loopback uniquement) et surtout `8000` (l'API du poller) sont désormais de
+**vrais ports côté hôte**, pas seulement internes à Docker. Avant de
+déployer, vérifiez donc aussi que `8000` est libre sur le VPS :
+
+```powershell
+Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+```
+
+S'il est déjà pris (par project-youness ou autre chose), changez `PORT_PY`
+dans `.env` **et** le port codé en dur dans `backend/python/Dockerfile`
+(`EXPOSE`/`--port`) avant de continuer.
+
+---
+
+## Pourquoi le poller tourne en réseau hôte
+
+Le poller SNMP (`network_mode: host` dans `backend/docker-compose.yml`)
+partage directement la pile réseau de la VM WSL2 au lieu du réseau bridge
+privé de Docker. Combiné au **mode réseau miroir de WSL2** (`.wslconfig`,
+`networkingMode=mirrored`), ça place le trafic SNMP sortant directement sur
+les interfaces réelles de l'hôte, sans passer par une couche NAT
+supplémentaire propre à Docker — un hop de moins qui peut rester dans un état
+périmé après un redémarrage du VPS.
+
+Deux conséquences à connaître :
+
+1. **Prérequis manuel dans Docker Desktop** : Settings → Resources → Network
+   → activer « Enable host networking » (une fois, sur le VPS). Sans ça,
+   `docker compose up` pour le service `poller` échoue.
+2. **Le poller n'est plus joignable par nom DNS Docker** (`poller` ne résout
+   plus depuis `app`) — `app` le contacte maintenant via
+   `host.docker.internal` (déjà configuré dans `docker-compose.yml`), et
+   Mongo doit publier son port en loopback (`127.0.0.1:27017:27017`) pour que
+   le poller (maintenant hors du réseau bridge) puisse encore l'atteindre.
+3. **L'API du poller (`:8000`) devient joignable depuis le réseau réel de
+   l'hôte**, plus seulement depuis l'intérieur de Docker — d'où le contrôle
+   `X-Poller-Token` ajouté sur `/control/poll` (`POLLER_SHARED_SECRET` dans
+   `.env`, obligatoire en production).
+
+Ceci **complète** le fix WSL2 mode miroir, ne le remplace pas — si le mode
+miroir lui-même ne survit pas à un redémarrage, un redémarrage planifié de
+WSL2 (tâche planifiée Windows lançant `wsl --shutdown` avant Docker Desktop)
+reste nécessaire en plus.
 
 > **Vécu au premier essai** : `8080` semblait libre mais a échoué au
 > démarrage avec `port is already allocated` — un troisième service tournait
@@ -69,6 +113,7 @@ cd orange-traffic
 cd backend
 Copy-Item .env.example .env
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"   # JWT_SECRET
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"   # POLLER_SHARED_SECRET (a different value)
 notepad .env
 ```
 
@@ -76,16 +121,18 @@ Minimum pour la prod :
 
 ```ini
 NODE_ENV=production
-JWT_SECRET=<le secret généré ci-dessus>
+JWT_SECRET=<le premier secret généré ci-dessus>
 JWT_EXPIRATION=12h
 MONGO_URL=mongodb://mongo:27017/orangetraffic
-HOST_PY=poller
-PORT_PY=8000
+POLLER_SHARED_SECRET=<le second secret généré ci-dessus>
 CORS_ORIGINS=
 POLL_INTERVAL_SECONDS=60
 READING_RETENTION_DAYS=90
 DEFAULT_SNMP_COMMUNITY=public
 ```
+
+(`HOST_PY`/`PORT_PY` n'ont pas besoin d'être dans `.env` en prod — ils sont
+fixés directement dans `backend/docker-compose.yml`.)
 
 Restreignez le fichier aux administrateurs :
 
