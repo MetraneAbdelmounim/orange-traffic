@@ -7,11 +7,10 @@ const { accessibleProjectIds } = require('../middlewares/auth');
 const { flagsKey } = require('../controller/flagsKey');
 const { APP_TIME_ZONE } = require('../config/timeZone');
 
-// Client decision (2026-09-26): 5 minutes — not exposed as a setting since
-// the brief doesn't ask for one. Matches the sweep interval itself
-// (scheduler.js), so in practice a persistent alarm gets re-notified on
-// essentially every sweep rather than being meaningfully deduped.
-const COOLDOWN_MS = 5 * 60 * 1000;
+// Client decision (2026-09-26): 10 minutes — not exposed as a setting since
+// the brief doesn't ask for one. Twice the sweep interval (scheduler.js), so
+// a persistent alarm skips roughly every other sweep instead of every one.
+const COOLDOWN_MS = 10 * 60 * 1000;
 
 function worstCriticality(alarms) {
   if (alarms.some((a) => a.criticality === 'critical')) return 'critical';
