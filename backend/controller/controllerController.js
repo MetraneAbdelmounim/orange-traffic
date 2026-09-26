@@ -6,6 +6,7 @@ const AlarmEvent = require('./alarmEvent');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { accessibleProjectIds } = require('../middlewares/auth');
 const { flagsKey } = require('./flagsKey');
+const { DISPLAYED_ALARM_LABELS } = require('./displayedAlarmLabels');
 
 const PY_BASE = `http://${config.HOST_PY}:${config.PORT_PY}`;
 // Must stay comfortably above the Python poller's own CONTROLLER_POLL_TIMEOUT
@@ -146,6 +147,12 @@ module.exports = {
       .limit(5000)
       .lean();
 
+    // Readings written before the client's alarm whitelist (2026-09-26) can
+    // still carry now-excluded labels — see displayedAlarmLabels.js.
+    for (const reading of readings) {
+      reading.activeFlags = (reading.activeFlags || []).filter((f) => DISPLAYED_ALARM_LABELS.has(f));
+    }
+
     return res.status(200).json({
       intervalSeconds: config.pollIntervalSeconds,
       readings,
@@ -168,7 +175,9 @@ module.exports = {
     if (!controller) return res.status(404).json({ error: 'Contrôleur introuvable' });
 
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 1000);
-    const filter = { controller: controller._id };
+    // Events logged before the client's alarm whitelist (2026-09-26) can
+    // still reference a now-excluded flag — see displayedAlarmLabels.js.
+    const filter = { controller: controller._id, flag: { $in: [...DISPLAYED_ALARM_LABELS] } };
     if (req.query.hours) {
       const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 24 * 90);
       filter.occurredAt = { $gte: new Date(Date.now() - hours * 3600 * 1000) };

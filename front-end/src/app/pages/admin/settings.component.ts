@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
+import { BackupService, RestoreResult } from '../../core/services/backup.service';
 import { LicenceService } from '../../core/services/licence.service';
 import { SettingsService } from '../../core/services/settings.service';
 import { translateApiError } from '../../i18n/backend-errors';
@@ -192,6 +194,42 @@ const RETENTION_PRESETS: { days: number; labelKey: 'settings.retention7d' | 'set
             </header>
             <a routerLink="/admin/members" class="btn btn-ghost inline-flex">{{ 'settings.manageMembers' | t }}</a>
           </section>
+
+          <!-- Backup & restore -->
+          <section class="card p-6">
+            <header class="mb-4">
+              <h2 class="text-sm font-semibold text-ink">{{ 'settings.backupTitle' | t }}</h2>
+              <p class="text-xs text-ink-muted">{{ 'settings.backupHint' | t }}</p>
+            </header>
+            <div class="flex flex-col gap-4">
+              <div>
+                <p class="text-sm text-ink-secondary mb-2">{{ 'settings.backupDownloadHint' | t }}</p>
+                <button type="button" class="btn btn-ghost" (click)="downloadBackup()" [disabled]="backingUp()">
+                  {{ (backingUp() ? 'common.loading' : 'settings.backupDownload') | t }}
+                </button>
+              </div>
+              <div class="border-t border-line pt-4">
+                <p class="text-sm text-ink-secondary mb-2">{{ 'settings.backupRestoreHint' | t }}</p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <input type="file" accept=".bkp" class="field max-w-xs" (change)="onRestoreFileSelected($event)" />
+                  <button
+                    type="button"
+                    class="btn btn-danger"
+                    [disabled]="!restoreFile() || restoring()"
+                    (click)="confirmingRestore.set(true)"
+                  >
+                    {{ 'settings.backupRestore' | t }}
+                  </button>
+                </div>
+                @if (restoreError(); as e) {
+                  <p class="chip chip-crit self-start mt-2"><span class="chip-dot"></span>{{ e }}</p>
+                }
+                @if (restoreResult(); as r) {
+                  <p class="chip chip-good self-start mt-2"><span class="chip-dot"></span>{{ 'settings.backupRestoreSuccess' | t }}</p>
+                }
+              </div>
+            </div>
+          </section>
         </div>
       }
     </div>
@@ -208,11 +246,26 @@ const RETENTION_PRESETS: { days: number; labelKey: 'settings.retention7d' | 'set
         </button>
       </ng-container>
     </app-modal>
+
+    <!-- Restore confirmation -->
+    <app-modal [open]="confirmingRestore()" [title]="'settings.backupRestoreConfirmTitle' | t" size="sm" (closed)="confirmingRestore.set(false)">
+      <p class="text-sm text-ink-secondary">
+        {{ 'settings.backupRestoreConfirmBody' | t }} {{ 'common.irreversible' | t }}
+      </p>
+      <ng-container modalFooter>
+        <button type="button" class="btn btn-ghost" (click)="confirmingRestore.set(false)">{{ 'common.cancel' | t }}</button>
+        <button type="button" class="btn btn-danger" [disabled]="restoring()" (click)="restoreBackup()">
+          {{ (restoring() ? 'common.loading' : 'settings.backupRestore') | t }}
+        </button>
+      </ng-container>
+    </app-modal>
   `,
 })
 export class SettingsComponent implements OnInit {
   private settingsService = inject(SettingsService);
   private licenceService = inject(LicenceService);
+  private backupService = inject(BackupService);
+  private auth = inject(AuthService);
   private i18n = inject(I18nService);
 
   settingsIcon = SETTINGS_ICON;
@@ -226,6 +279,12 @@ export class SettingsComponent implements OnInit {
   confirmingClear = signal(false);
   clearing = signal(false);
   clearResult = signal<ClearHistoryResult | null>(null);
+  backingUp = signal(false);
+  restoring = signal(false);
+  confirmingRestore = signal(false);
+  restoreFile = signal<File | null>(null);
+  restoreError = signal<string | null>(null);
+  restoreResult = signal<RestoreResult | null>(null);
 
   form: SettingsUpdate & { smtpPassSet?: boolean } = {
     pollIntervalSeconds: 60,
@@ -284,6 +343,45 @@ export class SettingsComponent implements OnInit {
       this.confirmingClear.set(false);
     } finally {
       this.clearing.set(false);
+    }
+  }
+
+  async downloadBackup(): Promise<void> {
+    this.backingUp.set(true);
+    try {
+      await this.backupService.download();
+    } finally {
+      this.backingUp.set(false);
+    }
+  }
+
+  onRestoreFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.restoreFile.set(input.files?.[0] ?? null);
+    this.restoreError.set(null);
+    this.restoreResult.set(null);
+  }
+
+  async restoreBackup(): Promise<void> {
+    const file = this.restoreFile();
+    if (!file) return;
+    this.restoring.set(true);
+    this.restoreError.set(null);
+    try {
+      const result = await this.backupService.restore(file);
+      this.restoreResult.set(result);
+      this.confirmingRestore.set(false);
+      // The restore just replaced the members collection — the account
+      // performing it may no longer exist under this id, so the current
+      // session is stale the moment this resolves. A short delay lets the
+      // success message actually be seen before the forced re-login.
+      setTimeout(() => this.auth.forceLogout(), 2500);
+    } catch (err: any) {
+      const message = translateApiError(err?.error?.error, this.i18n.lang());
+      this.restoreError.set(message || this.i18n.t('settings.backupRestoreFailed'));
+      this.confirmingRestore.set(false);
+    } finally {
+      this.restoring.set(false);
     }
   }
 

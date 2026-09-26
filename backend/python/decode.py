@@ -51,6 +51,29 @@ SHORT_ALARM_STATUS_BITS = {
 }
 
 
+# Client decision (2026-09-26): of the 21 bits above — all confirmed against
+# the client's own NTCIP reference and a real bench unit — only these 9 are
+# operationally relevant. The bit tables above stay complete and accurate to
+# the protocol (and still drive the raw unitAlarmStatus1/2/shortAlarmStatus
+# register values shown for diagnostics), but decode_bits()/decode_alarms()
+# below never surface any other label as an active alarm — so it never shows
+# in the UI's alarm list, never appears in activeFlags (badges, counts, the
+# alarm event log, the timeline chart), and never triggers a notification
+# (alertJob.js's isAffected reads lastSnapshot.alarms, which is this same
+# filtered output).
+DISPLAYED_LABELS = {
+    "Local Flash - entrée Local Flash active",
+    "MMU Flash - entrée MMU Flash active trop longtemps",
+    "Cycle Fail - défaut de cycle",
+    "Stop Time - entrée Stop Time active",
+    "Response Fault - défaut de réponse NEMA TS2 Port 1",
+    "Low Battery - tension batterie trop faible",
+    "Critical Alarm - Stop Time actif",
+    "Coordination Alarm - problème de coordination",
+    "T&F Flash - Local Flash ou MMU Flash actif",
+}
+
+
 def decode_bits(value, bit_table: dict) -> list:
     """
     Returns the list of active flag labels for a bitmask value.
@@ -61,7 +84,11 @@ def decode_bits(value, bit_table: dict) -> list:
     """
     if not value:
         return []
-    return [entry["label"] for bit, entry in bit_table.items() if value & (1 << bit)]
+    return [
+        entry["label"]
+        for bit, entry in bit_table.items()
+        if value & (1 << bit) and entry["label"] in DISPLAYED_LABELS
+    ]
 
 
 def decode_alarms(value, bit_table: dict, source_object: str) -> list:
@@ -83,7 +110,7 @@ def decode_alarms(value, bit_table: dict, source_object: str) -> list:
             "criticality": entry["criticality"],
         }
         for bit, entry in bit_table.items()
-        if value & (1 << bit)
+        if value & (1 << bit) and entry["label"] in DISPLAYED_LABELS
     ]
 
 

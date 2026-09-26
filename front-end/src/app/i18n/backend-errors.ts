@@ -50,6 +50,11 @@ const STATIC: Record<string, string> = {
   "Vous n'êtes pas autorisé ! Veuillez contacter votre administrateur": 'You are not authorized! Please contact your administrator',
   'Licence installée avec succès': 'License installed successfully',
   'Licence démo activée': 'Demo license activated',
+  'Fichier de sauvegarde manquant': 'Missing backup file',
+  "Restauration refusée : cet environnement contient déjà des données (projets ou contrôleurs). La restauration n'est possible que sur un environnement neuf.":
+    'Restore refused: this environment already has data (projects or controllers). Restore is only possible on a fresh environment.',
+  'Fichier de sauvegarde illisible ou corrompu': 'Unreadable or corrupted backup file',
+  'Format de sauvegarde non reconnu': 'Unrecognized backup format',
 };
 
 const DYNAMIC: Array<{ re: RegExp; en: (...groups: string[]) => string }> = [

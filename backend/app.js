@@ -16,6 +16,7 @@ const projectRoute = require('./project/projectRoute');
 const controllerRoute = require('./controller/controllerRoute');
 const memberRoute = require('./member/memberRoute');
 const settingsRoute = require('./settings/settingsRoute');
+const backupRoute = require('./backup/backupRoute');
 
 const app = express();
 const STATIC_ROOT = path.join(__dirname, 'public/browser');
@@ -90,6 +91,7 @@ app.use('/api/projects', projectRoute);
 app.use('/api/controllers', controllerRoute);
 app.use('/api/members', memberRoute);
 app.use('/api/settings', settingsRoute);
+app.use('/api/backup', backupRoute);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Route introuvable' }));
 
