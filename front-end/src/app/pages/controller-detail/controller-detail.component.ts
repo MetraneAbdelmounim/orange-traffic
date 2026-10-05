@@ -78,7 +78,14 @@ function buildTimelineRows(
     // Events arrive newest-first from the API — exactly the order this walk needs.
     const sorted = [...flagEvents].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
     const segments: TimelineSegment[] = [];
-    let active = currentFlags.includes(flag);
+    // A flag's own latest event is the more reliable "is it active now" —
+    // `currentFlags` only ever carries the client's live-display whitelist
+    // (displayedAlarmLabels.js), so a flag the journal is still tracking but
+    // that whitelist excludes would otherwise always compute as inactive.
+    // Only fall back to currentFlags for a flag with no events in this
+    // window at all — we can't know when it started, so assume it's been
+    // active throughout.
+    let active = sorted.length > 0 ? sorted[0].state === 'active' : currentFlags.includes(flag);
     let cursor = windowEnd;
 
     for (const event of sorted) {

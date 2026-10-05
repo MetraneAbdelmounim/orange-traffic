@@ -14,6 +14,7 @@ import { SafeHtmlPipe } from '../../ui/safe-html.pipe';
 
 const FOLDER_ICON = `<svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-19.5 0v6a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25v-6m-19.5 0h19.5M4.5 9.75V6a2.25 2.25 0 012.25-2.25h5.379a1.5 1.5 0 011.06.44l1.622 1.62a1.5 1.5 0 001.06.44H19.5A2.25 2.25 0 0121.75 8.25v1.5" /></svg>`;
 const TRASH_ICON = `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166M18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>`;
+const EDIT_ICON = `<svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>`;
 
 // Small (14px) chip-prefix icons — same icon vocabulary as the rest of the
 // app (controller-detail/project-detail reuse the same monitor/bell glyphs)
@@ -34,7 +35,7 @@ const CARD_HEADER_IMAGE = 'assets/login/bg-highway.webp';
     <div class="max-w-6xl mx-auto px-4 py-8">
       <app-page-header [title]="'projects.title' | t" [subtitle]="'projects.subtitle' | t" [icon]="folderIcon">
         @if (auth.isAdmin()) {
-          <button type="button" class="btn btn-primary" (click)="showForm.set(true)">
+          <button type="button" class="btn btn-primary" (click)="openCreate()">
             <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             {{ 'projects.new' | t }}
           </button>
@@ -63,14 +64,24 @@ const CARD_HEADER_IMAGE = 'assets/login/bg-highway.webp';
               [class.is-neutral]="!project.controllerCount"
             >
               @if (auth.isAdmin()) {
-                <button
-                  type="button"
-                  class="icon-btn icon-btn-danger absolute top-3 right-3 z-10"
-                  [title]="'projects.deleteProjectTooltip' | t"
-                  (click)="openDelete(project); $event.stopPropagation()"
-                >
-                  <span [innerHTML]="trashIcon | safeHtml"></span>
-                </button>
+                <div class="absolute top-3 right-3 z-10 flex gap-2">
+                  <button
+                    type="button"
+                    class="icon-btn"
+                    [title]="'projects.editProjectTooltip' | t"
+                    (click)="openEdit(project); $event.stopPropagation()"
+                  >
+                    <span [innerHTML]="editIcon | safeHtml"></span>
+                  </button>
+                  <button
+                    type="button"
+                    class="icon-btn icon-btn-danger"
+                    [title]="'projects.deleteProjectTooltip' | t"
+                    (click)="openDelete(project); $event.stopPropagation()"
+                  >
+                    <span [innerHTML]="trashIcon | safeHtml"></span>
+                  </button>
+                </div>
               }
               <a [routerLink]="['/projects', project._id]" class="flex flex-col gap-3">
                 <div class="h-24 w-full overflow-hidden bg-sunken">
@@ -121,8 +132,8 @@ const CARD_HEADER_IMAGE = 'assets/login/bg-highway.webp';
       }
     </div>
 
-    <app-modal [open]="showForm()" [title]="'projects.new' | t" [hasFooter]="false" (closed)="showForm.set(false)">
-      <form class="flex flex-col gap-4" (ngSubmit)="createProject()">
+    <app-modal [open]="showForm()" [title]="(editing() ? 'projects.editTitle' : 'projects.new') | t" [hasFooter]="false" (closed)="showForm.set(false)">
+      <form class="flex flex-col gap-4" (ngSubmit)="saveProject()">
         <div>
           <label class="label" for="nom">{{ 'projects.name' | t }}</label>
           <input id="nom" name="nom" class="field" [(ngModel)]="newNom" required />
@@ -131,9 +142,14 @@ const CARD_HEADER_IMAGE = 'assets/login/bg-highway.webp';
           <label class="label" for="description">{{ 'projects.description' | t }}</label>
           <input id="description" name="description" class="field" [(ngModel)]="newDescription" [placeholder]="'projects.descriptionPlaceholder' | t" />
         </div>
+        @if (formError()) {
+          <p class="chip chip-crit self-start"><span class="chip-dot"></span>{{ formError() }}</p>
+        }
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" class="btn btn-ghost" (click)="showForm.set(false)">{{ 'common.cancel' | t }}</button>
-          <button type="submit" class="btn btn-primary">{{ 'common.create' | t }}</button>
+          <button type="submit" class="btn btn-primary" [disabled]="formBusy()">
+            {{ (formBusy() ? 'common.loading' : (editing() ? 'common.save' : 'common.create')) | t }}
+          </button>
         </div>
       </form>
     </app-modal>
@@ -161,6 +177,7 @@ export class ProjectsComponent implements OnInit {
 
   folderIcon = FOLDER_ICON;
   trashIcon = TRASH_ICON;
+  editIcon = EDIT_ICON;
   controllerChipIcon = CONTROLLER_CHIP_ICON;
   alarmChipIcon = ALARM_CHIP_ICON;
   unreachableChipIcon = UNREACHABLE_CHIP_ICON;
@@ -169,6 +186,9 @@ export class ProjectsComponent implements OnInit {
   projects = signal<Project[]>([]);
   loading = signal(true);
   showForm = signal(false);
+  editing = signal<Project | null>(null);
+  formBusy = signal(false);
+  formError = signal<string | null>(null);
   newNom = '';
   newDescription = '';
 
@@ -191,13 +211,39 @@ export class ProjectsComponent implements OnInit {
     });
   }
 
-  createProject(): void {
+  openCreate(): void {
+    this.editing.set(null);
+    this.newNom = '';
+    this.newDescription = '';
+    this.formError.set(null);
+    this.showForm.set(true);
+  }
+
+  openEdit(project: Project): void {
+    this.editing.set(project);
+    this.newNom = project.nom;
+    this.newDescription = project.description || '';
+    this.formError.set(null);
+    this.showForm.set(true);
+  }
+
+  saveProject(): void {
     if (!this.newNom.trim()) return;
-    this.projectService.add({ nom: this.newNom, description: this.newDescription }).subscribe(() => {
-      this.newNom = '';
-      this.newDescription = '';
-      this.showForm.set(false);
-      this.load();
+    const data = { nom: this.newNom, description: this.newDescription };
+    const editing = this.editing();
+    this.formBusy.set(true);
+    this.formError.set(null);
+    const request = editing ? this.projectService.update(editing._id, data) : this.projectService.add(data);
+    request.subscribe({
+      next: () => {
+        this.formBusy.set(false);
+        this.showForm.set(false);
+        this.load();
+      },
+      error: (err) => {
+        this.formBusy.set(false);
+        this.formError.set(translateApiError(err?.error?.error, this.i18n.lang()) || this.i18n.t('projects.saveFailed'));
+      },
     });
   }
 

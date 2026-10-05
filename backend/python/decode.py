@@ -51,29 +51,6 @@ SHORT_ALARM_STATUS_BITS = {
 }
 
 
-# Client decision (2026-09-26): of the 21 bits above — all confirmed against
-# the client's own NTCIP reference and a real bench unit — only these 9 are
-# operationally relevant. The bit tables above stay complete and accurate to
-# the protocol (and still drive the raw unitAlarmStatus1/2/shortAlarmStatus
-# register values shown for diagnostics), but decode_bits()/decode_alarms()
-# below never surface any other label as an active alarm — so it never shows
-# in the UI's alarm list, never appears in activeFlags (badges, counts, the
-# alarm event log, the timeline chart), and never triggers a notification
-# (alertJob.js's isAffected reads lastSnapshot.alarms, which is this same
-# filtered output).
-DISPLAYED_LABELS = {
-    "Local Flash - entrée Local Flash active",
-    "MMU Flash - entrée MMU Flash active trop longtemps",
-    "Cycle Fail - défaut de cycle",
-    "Stop Time - entrée Stop Time active",
-    "Response Fault - défaut de réponse NEMA TS2 Port 1",
-    "Low Battery - tension batterie trop faible",
-    "Critical Alarm - Stop Time actif",
-    "Coordination Alarm - problème de coordination",
-    "T&F Flash - Local Flash ou MMU Flash actif",
-}
-
-
 def decode_bits(value, bit_table: dict) -> list:
     """
     Returns the list of active flag labels for a bitmask value.
@@ -81,14 +58,19 @@ def decode_bits(value, bit_table: dict) -> list:
     Always a list — empty when `value` is 0 or None, so a caller never needs
     to special-case "no alarms" versus "some alarms": the UI rule is simply
     "render this list of strings", never "render this raw integer".
+
+    This is a complete, faithful decode of every bit this app knows about —
+    it does NOT apply the client's 9-item "displayed alarms" whitelist
+    (backend/controller/displayedAlarmLabels.js, client decision
+    2026-10-05). That filtering is applied downstream, only at the points
+    that represent *live* state (the current-alarms box, badge counts,
+    notifications) — Controller.lastSnapshot, Reading, and AlarmEvent all
+    store the complete picture, so the historical journal/timeline can show
+    everything the controller ever actually reported.
     """
     if not value:
         return []
-    return [
-        entry["label"]
-        for bit, entry in bit_table.items()
-        if value & (1 << bit) and entry["label"] in DISPLAYED_LABELS
-    ]
+    return [entry["label"] for bit, entry in bit_table.items() if value & (1 << bit)]
 
 
 def decode_alarms(value, bit_table: dict, source_object: str) -> list:
@@ -97,7 +79,8 @@ def decode_alarms(value, bit_table: dict, source_object: str) -> list:
     needs to explain an alarm without re-deriving it — the label, which bit
     and raw value produced it, which NTCIP object it came from, and its
     criticality tier (client-defined: only shortAlarmStatus bit 7 is
-    "critical", everything else is "warning").
+    "critical", everything else is "warning"). See decode_bits() above for
+    why this is intentionally unfiltered.
     """
     if not value:
         return []
@@ -110,7 +93,7 @@ def decode_alarms(value, bit_table: dict, source_object: str) -> list:
             "criticality": entry["criticality"],
         }
         for bit, entry in bit_table.items()
-        if value & (1 << bit) and entry["label"] in DISPLAYED_LABELS
+        if value & (1 << bit)
     ]
 
 

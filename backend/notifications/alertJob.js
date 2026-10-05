@@ -5,6 +5,7 @@ const mailer = require('./mailer');
 const { buildAlertEmail } = require('./emailTemplate');
 const { accessibleProjectIds } = require('../middlewares/auth');
 const { flagsKey } = require('../controller/flagsKey');
+const { filterAlarms } = require('../controller/displayedAlarmLabels');
 const { APP_TIME_ZONE } = require('../config/timeZone');
 
 // Client decision (2026-09-26): 10 minutes — not exposed as a setting since
@@ -61,6 +62,14 @@ async function runAlertSweep() {
   const controllers = await Controller.find({ maintenanceMode: { $ne: true } })
     .populate('project')
     .lean();
+
+  // Restrict to the client's 9-item "live" whitelist before isAffected/
+  // flagsKey/worstCriticality/the email body see any of this — decode.py
+  // stores the complete decode, only live state (this sweep included) is
+  // narrowed. Mutates these throwaway .lean() objects in place.
+  for (const c of controllers) {
+    if (c.lastSnapshot) c.lastSnapshot.alarms = filterAlarms(c.lastSnapshot.alarms);
+  }
 
   // A controller that has recovered gets its dedup state cleared so a future
   // fault is treated as new rather than suppressed by a stale cooldown.

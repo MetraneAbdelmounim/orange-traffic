@@ -6,6 +6,7 @@ const Reading = require('../controller/reading');
 const AlarmEvent = require('../controller/alarmEvent');
 const asyncHandler = require('../middlewares/asyncHandler');
 const { accessibleProjectIds } = require('../middlewares/auth');
+const { DISPLAYED_ALARM_LABELS } = require('../controller/displayedAlarmLabels');
 
 const WRITABLE = ['nom', 'description'];
 
@@ -68,7 +69,11 @@ module.exports = {
           // with 3 simultaneous conditions counts as 3 here, matching what
           // the badge's label ("N en alarme") actually implies. Maintenance
           // controllers are excluded, same "full suppression" rule as the
-          // other counts.
+          // other counts. Only counts the client's "live" whitelist
+          // (displayedAlarmLabels.js) — lastSnapshot.activeFlags itself is
+          // the complete decode (backend/python/decode.py is unfiltered),
+          // so this badge must filter it the same way the controller
+          // detail page's current-alarms box does.
           alarmCount: {
             $sum: {
               $map: {
@@ -80,7 +85,15 @@ module.exports = {
                   },
                 },
                 as: 'c',
-                in: { $size: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] } },
+                in: {
+                  $size: {
+                    $filter: {
+                      input: { $ifNull: ['$$c.lastSnapshot.activeFlags', []] },
+                      as: 'f',
+                      cond: { $in: ['$$f', [...DISPLAYED_ALARM_LABELS]] },
+                    },
+                  },
+                },
               },
             },
           },
