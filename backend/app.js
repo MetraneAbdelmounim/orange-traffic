@@ -120,6 +120,15 @@ if (require.main === module) {
       await applyRetentionSetting(settings.historyRetentionDays).catch((err) =>
         console.error('Retention sync failed:', err.message)
       );
+
+      // Migration (2026-11-18): Controller.ip used to be unique on its own;
+      // it's now unique only together with port (several controllers may
+      // share one IP on different ports). Mongoose's autoIndex adds the new
+      // compound index automatically but never drops the old one, so it's
+      // dropped explicitly here — safe/idempotent, a no-op once it's gone.
+      const Controller = require('./controller/controller');
+      await Controller.collection.dropIndex('ip_1').catch(() => {});
+
       require('./notifications/scheduler').start();
       app.listen(config.PORT, () => {
         console.log(`Server running at http://${config.HOST}:${config.PORT}`);

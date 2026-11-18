@@ -51,7 +51,11 @@ const controllerSchema = mongoose.Schema(
   {
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', index: true },
     nom: { type: String, required: true, trim: true },
-    ip: { type: String, required: true, unique: true, trim: true },
+    // Not unique on its own: several controllers can share one IP as long as
+    // each uses a different port (e.g. one gateway exposing multiple logical
+    // controllers) — see the compound index below, which is what's actually
+    // enforced.
+    ip: { type: String, required: true, trim: true },
     port: { type: Number, default: 161 },
     community: { type: String, default: 'public', select: false },
     model: { type: String, default: 'ATC-1500', trim: true },
@@ -92,6 +96,11 @@ const controllerSchema = mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Replaces the old ip-alone unique index (see backend/app.js's startup
+// migration, which drops that stale index — Mongoose's autoIndex only adds
+// indexes declared here, it never removes ones a previous schema left behind).
+controllerSchema.index({ ip: 1, port: 1 }, { unique: true });
 
 controllerSchema.set('toJSON', {
   transform: (_doc, ret) => {

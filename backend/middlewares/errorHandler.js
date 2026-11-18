@@ -25,7 +25,15 @@ module.exports = (err, req, res, next) => {
   }
 
   if (err.code === 11000) {
-    const field = Object.keys(err.keyValue || {})[0] || 'valeur';
+    const keys = Object.keys(err.keyValue || {});
+    // Controller's unique index is compound (ip + port, not ip alone) — a
+    // same-ip-different-port controller is valid, only the exact pair isn't.
+    if (keys.includes('ip') && keys.includes('port')) {
+      return res.status(409).json({
+        error: 'Un contrôleur existe déjà avec cette adresse IP et ce port',
+      });
+    }
+    const field = keys[0] || 'valeur';
     return res.status(409).json({ error: `Cette ${field} existe déjà` });
   }
 

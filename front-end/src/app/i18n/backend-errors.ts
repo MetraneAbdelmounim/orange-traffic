@@ -36,6 +36,7 @@ const STATIC: Record<string, string> = {
   'Une licence valide est déjà active': 'A valid license is already active',
   'Projet introuvable': 'Project not found',
   'Contrôleur introuvable': 'Controller not found',
+  'Un contrôleur existe déjà avec cette adresse IP et ce port': 'A controller already exists with this IP address and port',
   "Vous devez changer votre mot de passe avant de continuer": 'You must change your password before continuing',
   'Identifiant de projet invalide ou manquant': 'Invalid or missing project identifier',
   "Vous n'êtes pas autorisé à accéder à ce projet": 'You are not authorized to access this project',
