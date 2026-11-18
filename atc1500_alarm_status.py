@@ -26,9 +26,9 @@ from pysnmp.hlapi.v1arch.asyncio import (
     get_cmd,
 )
 
-OID_UNIT_ALARM_STATUS_2 = "1.3.6.1.4.1.1206.4.2.1.3.7"
-OID_UNIT_ALARM_STATUS_1 = "1.3.6.1.4.1.1206.4.2.1.3.8"
-OID_SHORT_ALARM_STATUS = "1.3.6.1.4.1.1206.4.2.1.3.9"
+OID_UNIT_ALARM_STATUS_2 = "1.3.6.1.4.1.1206.4.2.1.3.7.0"
+OID_UNIT_ALARM_STATUS_1 = "1.3.6.1.4.1.1206.4.2.1.3.8.0"
+OID_SHORT_ALARM_STATUS = "1.3.6.1.4.1.1206.4.2.1.3.9.0"
 
 # Table confirmée par l'ingénieur du client (unitAlarmStatus1)
 UNIT_ALARM_STATUS_1_BITS = {

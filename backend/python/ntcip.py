@@ -22,10 +22,18 @@ SYSTEM_OIDS = {
 
 # unitAlarmStatus1/2 and shortAlarmStatus, per NTCIP 1202 — OIDs confirmed by
 # the client's network engineer and validated against the real controller.
+#
+# Explicit ".0" scalar-instance suffix (client test, 2026-11-18): these three
+# are scalar objects, not table entries, so ".0" is the only valid instance —
+# same convention SYSTEM_OIDS already uses above. The bare object-type OID
+# (no ".0") happened to still answer on the original Oriux ATC-1500 bench
+# unit, which is how this shipped originally, but SnmpGet.exe against a
+# mixed fleet (Oriux ATC1500, Q-FREE XN-1, Siemens m60) confirmed the ".0"
+# form is what actually answers reliably across vendors — don't drop it.
 ALARM_OIDS = {
-    "unitAlarmStatus2": "1.3.6.1.4.1.1206.4.2.1.3.7",
-    "unitAlarmStatus1": "1.3.6.1.4.1.1206.4.2.1.3.8",
-    "shortAlarmStatus": "1.3.6.1.4.1.1206.4.2.1.3.9",
+    "unitAlarmStatus2": "1.3.6.1.4.1.1206.4.2.1.3.7.0",
+    "unitAlarmStatus1": "1.3.6.1.4.1.1206.4.2.1.3.8.0",
+    "shortAlarmStatus": "1.3.6.1.4.1.1206.4.2.1.3.9.0",
 }
 
 # --- Best-effort, unconfirmed on this model ---------------------------------
